@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Projectradar — design mockup</title>
+<style>
+  /* ── Lichte modus (standaard) ── */
+  :root {
+    --bg-grad:   radial-gradient(1100px 560px at 85% -12%, #e4edfa 0%, #f4f7fb 55%);
+    --bg:        #f4f7fb;   /* app-achtergrond */
+    --bg-2:      #ffffff;   /* panel / card */
+    --bg-3:      #eef3fa;   /* hover */
+    --line:      #dde6f2;
+    --txt:       #112545;   /* diep marineblauw als tekst */
+    --txt-dim:   #51688c;
+    --txt-faint: #8a9ec0;
+    --accent:    #0d9488;   /* teal */
+    --accent-2:  #0284c7;   /* cyaan */
+    --accent-ink:#ffffff;   /* tekst op accent-knop */
+    --idee:      #7c3aed;
+    --actief:    #0d9488;
+    --onhold:    #b45309;
+    --afgerond:  #64748b;
+    --warn:      #b45309;
+    --ahead:     #047857;
+    --behind:    #e11d48;
+    --tagbg:     #f1f5fb;
+    --warnbg:    rgba(180,83,9,.08);
+    --warnbd:    rgba(180,83,9,.22);
+    --shadow:    0 10px 26px rgba(31,55,87,.10);
+    --radius:    14px;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+    --sans: -apple-system, "Inter", system-ui, "Segoe UI", sans-serif;
+  }
+  /* ── Donkere modus ── */
+  :root[data-theme="dark"] {
+    --bg-grad:   radial-gradient(1200px 600px at 80% -10%, #13294d 0%, #0a1424 55%);
+    --bg:        #0a1424;
+    --bg-2:      #0f1d33;
+    --bg-3:      #16284a;
+    --line:      #1f3357;
+    --txt:       #e8eef9;
+    --txt-dim:   #8ba0c4;
+    --txt-faint: #5d739a;
+    --accent:    #2dd4bf;
+    --accent-2:  #38bdf8;
+    --accent-ink:#062018;
+    --idee:      #a78bfa;
+    --actief:    #2dd4bf;
+    --onhold:    #fbbf24;
+    --afgerond:  #64748b;
+    --warn:      #f59e0b;
+    --ahead:     #34d399;
+    --behind:    #fb7185;
+    --tagbg:     #0b1832;
+    --warnbg:    rgba(245,158,11,.08);
+    --warnbd:    rgba(245,158,11,.25);
+    --shadow:    0 12px 30px rgba(0,0,0,.35);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg-grad);
+    color: var(--txt);
+    font-family: var(--sans);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+  .app { display: grid; grid-template-columns: 232px 1fr; min-height: 100vh; }
+
+  /* Sidebar */
+  .side { background: var(--bg-2); border-right: 1px solid var(--line); padding: 22px 16px; display: flex; flex-direction: column; gap: 6px; }
+  .brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px 22px; }
+  .logo { width: 30px; height: 30px; border-radius: 9px; background: linear-gradient(135deg, var(--accent), var(--accent-2)); position: relative; box-shadow: 0 4px 16px rgba(45,212,191,.35); }
+  .logo::after { content:""; position:absolute; inset:9px; border:2px solid #07101c; border-radius:50%; }
+  .logo::before { content:""; position:absolute; left:50%; top:50%; width:2px; height:9px; background:#07101c; transform-origin:bottom; transform:translate(-50%,-100%) rotate(38deg); z-index:1; }
+  .brand b { font-size: 16px; letter-spacing: .2px; }
+  .nav { display:flex; flex-direction:column; gap:2px; }
+  .nav a { display:flex; align-items:center; gap:11px; padding:9px 12px; border-radius:10px; color:var(--txt-dim); text-decoration:none; font-size:14px; font-weight:500; }
+  .nav a .ic { width:17px; text-align:center; opacity:.85; }
+  .nav a:hover { background: var(--bg-3); color: var(--txt); }
+  .nav a.on { background: linear-gradient(90deg, rgba(45,212,191,.16), rgba(56,189,248,.05)); color: var(--txt); box-shadow: inset 2px 0 0 var(--accent); }
+  .side .spacer { flex:1; }
+  .pc-card { background: var(--bg-2); border:1px solid var(--line); border-radius:12px; padding:12px; font-size:12.5px; }
+  .pc-card .row { display:flex; align-items:center; gap:8px; color:var(--txt-dim); }
+  .pc-card .row + .row { margin-top:7px; }
+  .dot { width:8px; height:8px; border-radius:50%; background:var(--ahead); box-shadow:0 0 8px var(--ahead); }
+
+  /* Main */
+  .main { padding: 26px 32px 40px; }
+  .top { display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; gap:16px; }
+  .top h1 { font-size:22px; font-weight:650; letter-spacing:.2px; }
+  .top .sub { color:var(--txt-faint); font-size:13px; margin-top:3px; }
+  .search { flex:1; max-width:320px; background:var(--bg-2); border:1px solid var(--line); border-radius:10px; padding:9px 13px; color:var(--txt-dim); font-size:13.5px; display:flex; align-items:center; gap:9px; }
+  .btn { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color:var(--accent-ink); border:none; padding:9px 15px; border-radius:10px; font-weight:650; font-size:13.5px; cursor:pointer; box-shadow:0 4px 14px rgba(13,148,136,.25); }
+  .toggle { background:var(--bg-2); border:1px solid var(--line); color:var(--txt-dim); width:38px; height:38px; border-radius:10px; cursor:pointer; font-size:16px; display:flex; align-items:center; justify-content:center; }
+  .toggle:hover { color:var(--txt); border-color:var(--accent); }
+  .btn.ghost { background:var(--bg-2); color:var(--txt-dim); border:1px solid var(--line); box-shadow:none; }
+
+  .filters { display:flex; gap:8px; margin-bottom:18px; flex-wrap:wrap; }
+  .chip { font-size:12.5px; padding:6px 12px; border-radius:20px; background:var(--bg-2); border:1px solid var(--line); color:var(--txt-dim); cursor:pointer; }
+  .chip.on { background:var(--bg-3); color:var(--txt); border-color:#2a456f; }
+
+  /* Grid */
+  .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(305px,1fr)); gap:16px; }
+  .card { background: var(--bg-2); border:1px solid var(--line); border-radius:var(--radius); padding:17px 17px 15px; cursor:pointer; transition:transform .12s, border-color .12s, box-shadow .12s; position:relative; overflow:hidden; box-shadow:var(--shadow); }
+  .card:hover { transform:translateY(-3px); border-color:var(--accent); box-shadow:0 16px 34px rgba(31,55,87,.16); }
+  .card .head { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+  .card h3 { font-size:15.5px; font-weight:640; }
+  .card .desc { color:var(--txt-dim); font-size:12.8px; margin-top:6px; line-height:1.5; min-height:36px; }
+  .badge { font-size:11px; font-weight:650; padding:4px 9px; border-radius:7px; white-space:nowrap; display:inline-flex; align-items:center; gap:5px; }
+  .badge::before { content:""; width:6px; height:6px; border-radius:50%; background:currentColor; }
+  .b-idee    { color:var(--idee);    background:rgba(167,139,250,.13); }
+  .b-actief  { color:var(--actief);  background:rgba(45,212,191,.13); }
+  .b-onhold  { color:var(--onhold);  background:rgba(251,191,36,.13); }
+  .b-afgerond{ color:var(--afgerond);background:rgba(100,116,139,.16); }
+
+  .stack { display:flex; gap:6px; margin-top:13px; flex-wrap:wrap; }
+  .tag { font-size:11px; color:var(--txt-dim); background:var(--tagbg); border:1px solid var(--line); padding:3px 8px; border-radius:6px; font-family:var(--mono); }
+
+  .meta { display:flex; align-items:center; gap:14px; margin-top:14px; padding-top:13px; border-top:1px solid var(--line); font-size:12px; color:var(--txt-faint); }
+  .meta .git { font-family:var(--mono); color:var(--txt-dim); }
+  .meta .changes { color:var(--warn); }
+
+  .pcs { display:flex; align-items:center; gap:6px; margin-top:12px; }
+  .pcs .lbl { font-size:11px; color:var(--txt-faint); margin-right:2px; }
+  .pcbadge { font-size:11px; font-family:var(--mono); padding:3px 8px; border-radius:6px; background:var(--tagbg); border:1px solid var(--line); color:var(--txt-dim); display:inline-flex; align-items:center; gap:5px; }
+  .pcbadge.lead { border-color:rgba(52,211,153,.4); color:var(--ahead); }
+  .pcbadge .ah { color:var(--ahead); }
+  .pcbadge .bh { color:var(--behind); }
+
+  .diverge { margin-top:12px; font-size:11.5px; background:var(--warnbg); border:1px solid var(--warnbd); color:var(--warn); padding:7px 10px; border-radius:9px; display:flex; align-items:center; gap:8px; }
+
+  /* No-git section */
+  .section-h { display:flex; align-items:center; gap:10px; margin:34px 0 16px; }
+  .section-h h2 { font-size:15px; font-weight:620; color:var(--txt-dim); }
+  .section-h .count { font-size:12px; color:var(--txt-faint); background:var(--bg-2); border:1px solid var(--line); padding:2px 9px; border-radius:20px; }
+  .nogit { display:grid; grid-template-columns:repeat(auto-fill, minmax(305px,1fr)); gap:12px; }
+  .nogit .card { cursor:default; border-style:dashed; background:transparent; box-shadow:none; }
+  .nogit .card:hover { transform:none; box-shadow:none; border-color:var(--line); }
+  .nogit .path { font-family:var(--mono); font-size:12px; color:var(--txt-faint); margin-top:5px; }
+  .nogit .actions { margin-top:13px; display:flex; gap:8px; }
+  .mini { font-size:12px; padding:6px 11px; border-radius:8px; border:1px solid var(--line); background:var(--bg-3); color:var(--txt); cursor:pointer; }
+  .mini.pri { background:rgba(45,212,191,.14); border-color:rgba(45,212,191,.35); color:var(--accent); font-weight:600; }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- Sidebar -->
+  <aside class="side">
+    <div class="brand"><div class="logo"></div><b>Projectradar</b></div>
+    <nav class="nav">
+      <a class="on" href="#"><span class="ic">▦</span> Overzicht</a>
+      <a href="#"><span class="ic">◴</span> Activiteit</a>
+      <a href="#"><span class="ic">◷</span> Roadmaps</a>
+      <a href="#"><span class="ic">⌥</span> Mijn PC's</a>
+      <a href="#"><span class="ic">⚙</span> Instellingen</a>
+    </nav>
+    <div class="spacer"></div>
+    <div class="pc-card">
+      <div class="row"><span class="dot"></span><b style="color:var(--txt)">Deze PC · MacBook</b></div>
+      <div class="row" style="margin-top:9px">Laatste scan · 2 min geleden</div>
+      <div class="row">12 repo's · 2 zonder git</div>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+    <div class="top">
+      <div>
+        <h1>Overzicht</h1>
+        <div class="sub">10 projecten · over 3 PC's · 4 actief</div>
+      </div>
+      <div class="search">⌕ Zoek project, stack of branch…</div>
+      <button class="toggle" id="themeBtn" title="Wissel licht/donker">☾</button>
+      <button class="btn">+ Map scannen</button>
+    </div>
+
+    <div class="filters">
+      <span class="chip on">Alle</span>
+      <span class="chip">Actief</span>
+      <span class="chip">Idee</span>
+      <span class="chip">On hold</span>
+      <span class="chip">Afgerond</span>
+      <span class="chip" style="margin-left:auto">Sorteer: Laatst gewijzigd ▾</span>
+    </div>
+
+    <div class="grid">
+      <!-- Card: Goalflow (multi-PC, divergentie) -->
+      <div class="card">
+        <div class="head">
+          <h3>Goalflow</h3>
+          <span class="badge b-actief">Actief</span>
+        </div>
+        <div class="desc">Web-app voor het bijhouden en behalen van persoonlijke doelen.</div>
+        <div class="stack">
+          <span class="tag">Next.js</span><span class="tag">Supabase</span><span class="tag">Tailwind</span>
+        </div>
+        <div class="pcs">
+          <span class="lbl">Op:</span>
+          <span class="pcbadge lead">MacBook · <span class="ah">▲3</span></span>
+          <span class="pcbadge">Desktop · <span class="bh">▼3</span></span>
+        </div>
+        <div class="diverge">⚠ Desktop loopt 3 commits achter op MacBook</div>
+        <div class="meta">
+          <span class="git">main</span>
+          <span>· 2u geleden</span>
+          <span class="changes">● niet-gecommit</span>
+        </div>
+      </div>
+
+      <!-- Card: PromptPad -->
+      <div class="card">
+        <div class="head">
+          <h3>PromptPad</h3>
+          <span class="badge b-actief">Actief</span>
+        </div>
+        <div class="desc">Chrome side-panel extensie die test-notities omzet in prompts.</div>
+        <div class="stack">
+          <span class="tag">Vite</span><span class="tag">React</span><span class="tag">OpenAI</span>
+        </div>
+        <div class="pcs">
+          <span class="lbl">Op:</span>
+          <span class="pcbadge">MacBook</span>
+        </div>
+        <div class="meta">
+          <span class="git">main</span>
+          <span>· gisteren</span>
+          <span style="color:var(--ahead)">● schoon</span>
+        </div>
+      </div>
+
+      <!-- Card: Projectradar -->
+      <div class="card">
+        <div class="head">
+          <h3>Projectradar</h3>
+          <span class="badge b-idee">Idee</span>
+        </div>
+        <div class="desc">Desktop-app die je git-projecten over meerdere PC's centraal overzicht geeft.</div>
+        <div class="stack">
+          <span class="tag">Tauri</span><span class="tag">React</span><span class="tag">Supabase</span>
+        </div>
+        <div class="pcs">
+          <span class="lbl">Op:</span>
+          <span class="pcbadge">MacBook</span>
+        </div>
+        <div class="meta">
+          <span class="git">— PRD klaar</span>
+          <span>· geen commits</span>
+        </div>
+      </div>
+
+      <!-- Card: Newsticker -->
+      <div class="card">
+        <div class="head">
+          <h3>Newsticker</h3>
+          <span class="badge b-onhold">On hold</span>
+        </div>
+        <div class="desc">Chrome new-tab extensie die relevant nieuws (RSS) met AI filtert.</div>
+        <div class="stack">
+          <span class="tag">Vite</span><span class="tag">React</span><span class="tag">OpenAI</span>
+        </div>
+        <div class="pcs">
+          <span class="lbl">Op:</span>
+          <span class="pcbadge">Desktop</span>
+        </div>
+        <div class="meta">
+          <span class="git">feature/ai</span>
+          <span>· 3 wkn geleden</span>
+        </div>
+      </div>
+
+      <!-- Card: afgerond voorbeeld -->
+      <div class="card">
+        <div class="head">
+          <h3>Portfolio-site</h3>
+          <span class="badge b-afgerond">Afgerond</span>
+        </div>
+        <div class="desc">Persoonlijke portfolio, live gedeployed.</div>
+        <div class="stack">
+          <span class="tag">Astro</span><span class="tag">Vercel</span>
+        </div>
+        <div class="pcs">
+          <span class="lbl">Op:</span>
+          <span class="pcbadge">MacBook</span>
+          <span class="pcbadge">Desktop</span>
+        </div>
+        <div class="meta">
+          <span class="git">main</span>
+          <span>· 4 mnd geleden</span>
+          <span style="color:var(--ahead)">● in sync</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Niet-git sectie -->
+    <div class="section-h">
+      <h2>Nog geen git</h2>
+      <span class="count">2 mappen</span>
+    </div>
+    <div class="nogit">
+      <div class="card">
+        <div class="head"><h3>experiment-canvas</h3></div>
+        <div class="path">~/programms/experiment-canvas</div>
+        <div class="actions">
+          <button class="mini pri">git init</button>
+          <button class="mini">Toevoegen als project</button>
+          <button class="mini">Negeren</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="head"><h3>scratch-scripts</h3></div>
+        <div class="path">~/programms/scratch-scripts</div>
+        <div class="actions">
+          <button class="mini pri">git init</button>
+          <button class="mini">Toevoegen als project</button>
+          <button class="mini">Negeren</button>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+<script>
+  const root = document.documentElement;
+  const btn = document.getElementById('themeBtn');
+  function apply(t){ root.setAttribute('data-theme', t); btn.textContent = t === 'dark' ? '☀' : '☾'; }
+  apply('light');               // standaard: lichte modus
+  btn.addEventListener('click', () =>
+    apply(root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'));
+</script>
+</body>
+</html>
