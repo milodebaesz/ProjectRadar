@@ -326,14 +326,14 @@ export default function ProjectDetail({ project, claudeState, hasGithubToken, on
             </p>
             <div className="link-row">
               {repoLink && (
-                <span className="link-pill" onClick={() => onOpenPath(repoLink)}>
+                <button type="button" className="link-pill" onClick={() => onOpenPath(repoLink)}>
                   ↗ Repo
-                </span>
+                </button>
               )}
               {deployLink && (
-                <span className="link-pill" onClick={() => onOpenPath(deployLink)}>
+                <button type="button" className="link-pill" onClick={() => onOpenPath(deployLink)}>
                   ↗ Deploy
-                </span>
+                </button>
               )}
             </div>
           </div>

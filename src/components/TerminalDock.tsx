@@ -197,22 +197,15 @@ export default function TerminalDock({
       <div className="term-bar">
         <div className="term-tabs">
           {terminals.map((t) => (
-            <div
-              key={t.id}
-              className={`term-tab${t.id === activeId ? " on" : ""}`}
-              onClick={() => onSelect(t.id)}
-              title={t.cwd}
-            >
-              <span className="dot" />
-              <span className="lbl">{t.title}</span>
-              <button
-                className="x"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onClose(t.id);
-                }}
-                title="Tab sluiten"
-              >
+            // Tab en sluitknop staan naast elkaar in plaats van genest: een
+            // knop in een knop is ongeldig, en als <div onClick> was de tab
+            // zelf niet met het toetsenbord te bereiken.
+            <div key={t.id} className={`term-tab${t.id === activeId ? " on" : ""}`}>
+              <button type="button" className="term-tab-open" onClick={() => onSelect(t.id)} title={t.cwd}>
+                <span className="dot" />
+                <span className="lbl">{t.title}</span>
+              </button>
+              <button type="button" className="x" onClick={() => onClose(t.id)} title="Tab sluiten">
                 ✕
               </button>
             </div>

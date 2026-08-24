@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useEscapeKey } from "../hooks/useEscapeKey";
 
 interface Props {
   value: string;
@@ -18,10 +19,11 @@ export default function ClaudeInstructionsModal({
   placeholder = "Bijv. 'Focus op de iOS-app, niet op de backend' of 'Schrijf mijlpalen in het Engels'…",
 }: Props) {
   const [text, setText] = useState(value);
+  useEscapeKey(onCancel);
 
   return (
-    <div className="modal-overlay" onClick={onCancel}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-overlay" onClick={onCancel} role="presentation">
+      <div className="modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
         <h2>{title}</h2>
         <p className="hint">{hint}</p>
         <div className="field" style={{ marginBottom: 0 }}>

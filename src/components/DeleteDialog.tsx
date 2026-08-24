@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useEscapeKey } from "../hooks/useEscapeKey";
 import type { Project } from "../types";
 
 export interface DeleteOptions {
@@ -31,6 +32,12 @@ export default function DeleteDialog({
   const [typed, setTyped] = useState("");
   const [busy, setBusy] = useState(false);
 
+  // Escape sluit de dialoog, maar niet terwijl het verwijderen al loopt —
+  // dan is er niets meer af te breken en zou het alleen het beeld weghalen.
+  useEscapeKey(() => {
+    if (!busy) onCancel();
+  });
+
   // Map of GitHub aanvinken is onomkeerbaar → naam exact overtypen verplicht.
   const destructive = trashFolder || deleteGithub;
   const nameOk = typed.trim() === project.name;
@@ -47,8 +54,8 @@ export default function DeleteDialog({
   }
 
   return (
-    <div className="modal-overlay" onClick={onCancel}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-overlay" onClick={onCancel} role="presentation">
+      <div className="modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
         <h2>Project verwijderen</h2>
         <p className="hint">
           <strong>{project.name}</strong> wordt uit het radar-overzicht gehaald

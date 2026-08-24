@@ -46,20 +46,21 @@ export default function ProjectCard({
     project.states.find((s) => s.isThisPc) ?? project.states[0];
 
   return (
-    <div className="card" onClick={() => onOpen(project)}>
+    // De kaart bevat zelf knoppen, dus hij kan geen <button> zijn. In plaats
+    // daarvan is de titel de echte knop, en rekt die zich via ::after uit over
+    // het hele kaartvlak — muisklik overal, tab-stop precies één, en een
+    // voorleesbare naam in plaats van de complete kaartinhoud.
+    <div className="card">
       <div className="head">
-        <h3>{project.name}</h3>
+        <h3>
+          <button type="button" className="card-open" onClick={() => onOpen(project)}>
+            {project.name}
+          </button>
+        </h3>
         <div className="head-right">
           <ClaudeBadge state={claudeState} />
           {canLaunch && (
-            <button
-              className="launch"
-              title="Start de dev-server"
-              onClick={(e) => {
-                e.stopPropagation();
-                onLaunch(project);
-              }}
-            >
+            <button className="launch" title="Start de dev-server" onClick={() => onLaunch(project)}>
               ▶ Start
             </button>
           )}
@@ -96,11 +97,7 @@ export default function ProjectCard({
       )}
 
       {nextMilestone && next && (
-        <label
-          className="next-milestone"
-          title="Direct afvinken zonder het project te openen"
-          onClick={(e) => e.stopPropagation()}
-        >
+        <label className="next-milestone" title="Direct afvinken zonder het project te openen">
           <input
             type="checkbox"
             checked={false}
