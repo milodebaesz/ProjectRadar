@@ -11,7 +11,7 @@ centraal samenbrengt, inclusief roadmap-editor en Claude Code-integratie.
 | 2 | Lokale git-scan (Rust) | ✅ Klaar |
 | 3 | Cloud-sync + dashboard | ✅ Klaar |
 | 4 | Projectverrijking + Claude + terminal | ✅ Klaar |
-| 5 | Dagelijks gebruik & UX-polish | 🔜 Volgende |
+| 5 | Dagelijks gebruik & UX-polish | ✅ Klaar |
 | 6 | Ambient & notificaties | 🔜 Deels |
 | 7 | Context & workflow | — |
 | 8 | Git gezondheid | — |
@@ -90,7 +90,7 @@ centraal samenbrengt, inclusief roadmap-editor en Claude Code-integratie.
 
 ---
 
-## Sprint 5 — Dagelijks gebruik & UX-polish 🔜
+## Sprint 5 — Dagelijks gebruik & UX-polish ✅
 
 **Doel:** de app voelt af voor dagelijks gebruik op één machine.
 
@@ -117,11 +117,15 @@ centraal samenbrengt, inclusief roadmap-editor en Claude Code-integratie.
       link-pills zijn echte knoppen en dus met het toetsenbord te bedienen;
       `prefers-reduced-motion` zet de decoratieve animaties uit.
 
-**Open:**
-- [ ] **Auto-rescan:** herscant op instelbaar interval (bijv. 5 min) via een
-      instelling in de UI — zodat de git-stand vanzelf bijblijft
-- [ ] **"Drifting" badge:** als status "actief" is maar >14 dagen geen commit
-      binnenkwam, toon een automatische waarschuwingsbadge op de kaart
+- [x] **Auto-rescan:** instelbaar interval (uit / 5 / 15 / 30 / 60 min) in
+      Instellingen; de scan-lus in `useScan` bestond al, alleen de UI om 'm
+      aan te zetten ontbrak — hij stond dus altijd op 0
+- [x] **"Drifting" badge:** `driftDays()` meldt een project dat "actief" heet
+      maar >14 dagen geen commit meer kreeg, met dezelfde kalme callout-stijl
+      als de divergentie-melding. Kijkt naar de nieuwste commit over álle PC's:
+      werk je er op je andere machine wél aan, dan is er niets aan de hand.
+
+**Open:** —
 
 ---
 

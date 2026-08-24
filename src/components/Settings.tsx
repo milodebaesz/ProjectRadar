@@ -18,6 +18,15 @@ import {
   type NightlyStatusInfo,
 } from "../lib/tauri";
 
+/** Keuzes voor de auto-rescan; 0 = uit. */
+const RESCAN_OPTIONS = [
+  { minutes: 0, label: "Uit — alleen handmatig" },
+  { minutes: 5, label: "Elke 5 minuten" },
+  { minutes: 15, label: "Elke 15 minuten" },
+  { minutes: 30, label: "Elk half uur" },
+  { minutes: 60, label: "Elk uur" },
+];
+
 interface Props {
   settings: SettingsType;
   machine: MachineInfo | null;
@@ -274,6 +283,26 @@ export default function Settings({
           <button className="btn ghost" onClick={onRescan} disabled={!settings.roots.length}>
             Nu scannen
           </button>
+        </div>
+
+        <div className="field" style={{ marginTop: 18, marginBottom: 0, maxWidth: 320 }}>
+          <label htmlFor="rescan-interval">Automatisch opnieuw scannen</label>
+          <select
+            id="rescan-interval"
+            value={settings.rescanInterval}
+            onChange={(e) => onChange({ ...settings, rescanInterval: Number(e.target.value) })}
+          >
+            {RESCAN_OPTIONS.map((o) => (
+              <option key={o.minutes} value={o.minutes}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+          <p className="hint" style={{ marginTop: 6, marginBottom: 0 }}>
+            {settings.rescanInterval > 0
+              ? `De git-stand blijft vanzelf bijwerken; er wordt elke ${settings.rescanInterval} minuten opnieuw gescand zolang de app open staat.`
+              : "Staat uit — de git-stand werkt alleen bij als je zelf op Scannen klikt."}
+          </p>
         </div>
       </div>
 

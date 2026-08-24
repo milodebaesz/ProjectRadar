@@ -163,17 +163,12 @@
         {
           "id": "auto-rescan",
           "text": "Auto-rescan op instelbaar interval (bijv. 5 min) via UI-instelling",
-          "done": false
+          "done": true
         },
         {
           "id": "drifting-badge",
           "text": "\"Drifting\" badge: status 'actief' maar >14 dagen geen commit",
-          "done": false
-        },
-        {
-          "id": "statistieken",
-          "text": "Statistieken-view: commits/week per project, totaal actieve projecten",
-          "done": false
+          "done": true
         },
         {
           "id": "design-pass",
@@ -240,6 +235,11 @@
         {
           "id": "parking-note-claude",
           "text": "Parking note automatisch meesturen als context aan Claude bij sessiestart",
+          "done": false
+        },
+        {
+          "id": "statistieken",
+          "text": "Statistieken-view: commits/week per project, totaal actieve projecten",
           "done": false
         }
       ]

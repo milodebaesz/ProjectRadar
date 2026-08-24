@@ -8,6 +8,7 @@ import {
   roadmapProgress,
   localPath,
   nextOpenPhase,
+  driftDays,
 } from "../lib/model";
 import { relativeTime } from "../lib/format";
 
@@ -40,6 +41,7 @@ export default function ProjectCard({
   const progress = roadmapProgress(project);
   const canLaunch = !!localPath(project);
   const next = nextOpenPhase(project.meta.roadmap ?? []);
+  const drift = driftDays(project);
   const nextMilestone = next?.milestones[0] ?? null;
   // De stand op deze PC (lokaal is er precies één).
   const primary =
@@ -129,6 +131,12 @@ export default function ProjectCard({
       )}
 
       {!cmp.inSync && cmp.message && <div className="diverge">⚠ {cmp.message}</div>}
+
+      {drift !== null && (
+        <div className="drifting" title={`Status staat op "actief", maar de laatste commit is ${drift} dagen oud`}>
+          ⧗ {drift} dagen stil — nog steeds actief?
+        </div>
+      )}
 
       {primary && (
         <div className="meta">

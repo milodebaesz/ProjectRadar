@@ -261,6 +261,30 @@ export function statusOf(p: Project): Status {
   return p.meta.status ?? "idee";
 }
 
+/** Na hoeveel dagen stilte een project dat "actief" heet is afgedwaald. */
+export const DRIFT_DAYS = 14;
+
+/**
+ * Dagen stilte van een project dat op "actief" staat maar al weken geen commit
+ * meer kreeg; null als er niets te melden is.
+ *
+ * Kijkt naar de nieuwste commit over álle machines heen, niet naar deze PC:
+ * een project waar je op je andere machine wél aan werkt is niet afgedwaald,
+ * dat staat hier alleen stil.
+ *
+ * Zonder commits (nieuw project) is er geen datum om vanaf te meten, dus geen
+ * oordeel — liever niets zeggen dan iets verzinnen.
+ */
+export function driftDays(p: Project, now: number = Date.now()): number | null {
+  if (statusOf(p) !== "actief") return null;
+  const last = newestState(p)?.lastCommitDate;
+  if (!last) return null;
+  const then = new Date(last).getTime();
+  if (Number.isNaN(then)) return null;
+  const days = Math.floor((now - then) / 86_400_000);
+  return days >= DRIFT_DAYS ? days : null;
+}
+
 export interface RoadmapProgress {
   done: number;
   total: number;

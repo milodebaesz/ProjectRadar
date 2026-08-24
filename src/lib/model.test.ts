@@ -14,6 +14,8 @@ import {
   reorderProjects,
   dedupeRoadmap,
   normalizeRoadmap,
+  driftDays,
+  DRIFT_DAYS,
 } from "./model";
 
 /** Minimale RepoInfo-fixture; overschrijf alleen wat de test nodig heeft. */
@@ -320,6 +322,61 @@ describe("refreshRoadmapFromFile", () => {
     const file = [phase({ id: "nieuw-f", milestones: [{ id: "nieuw-m", text: "Login-flow bouwen", done: false }] })];
     const result = refreshRoadmapFromFile(cached, file);
     expect(result[0].milestones[0]).toMatchObject({ text: "Login-flow bouwen", done: true });
+  });
+});
+
+describe("driftDays", () => {
+  const NU = new Date("2026-08-24T12:00:00Z").getTime();
+  const DAG = 86_400_000;
+
+  /** Project met één machine, instelbare status en laatste-commitdatum. */
+  function proj(status: ProjectMeta["status"], dagenGeleden: number | null): Project {
+    const p = buildProjects([repo()], { demo: { key: "demo", status } }, "mac")[0];
+    p.states[0].lastCommitDate = dagenGeleden === null ? null : new Date(NU - dagenGeleden * DAG).toISOString();
+    return p;
+  }
+
+  it("meldt niets bij een project dat recent nog commits kreeg", () => {
+    expect(driftDays(proj("actief", 3), NU)).toBeNull();
+  });
+
+  it("meldt niets vlak vóór de grens, wel erop", () => {
+    expect(driftDays(proj("actief", DRIFT_DAYS - 1), NU)).toBeNull();
+    expect(driftDays(proj("actief", DRIFT_DAYS), NU)).toBe(DRIFT_DAYS);
+  });
+
+  it("telt de dagen stilte", () => {
+    expect(driftDays(proj("actief", 40), NU)).toBe(40);
+  });
+
+  it("oordeelt alleen over projecten die 'actief' heten", () => {
+    for (const status of ["idee", "onhold", "afgerond"] as const) {
+      expect(driftDays(proj(status, 90), NU)).toBeNull();
+    }
+  });
+
+  it("zwijgt zonder commits — er is geen datum om vanaf te meten", () => {
+    expect(driftDays(proj("actief", null), NU)).toBeNull();
+  });
+
+  it("kijkt naar de nieuwste commit over alle PC's, niet naar deze PC", () => {
+    // Hier stil, op de andere machine gisteren nog gecommit: niet afgedwaald.
+    const p = proj("actief", 60);
+    p.states.push({
+      machine: "studio",
+      path: null,
+      branch: "main",
+      detached: false,
+      lastCommitDate: new Date(NU - 1 * DAG).toISOString(),
+      lastCommitHash: "aaa111",
+      totalCommits: 9,
+      weeklyCommits: 3,
+      hasUncommitted: false,
+      ahead: 0,
+      behind: 0,
+      isThisPc: false,
+    });
+    expect(driftDays(p, NU)).toBeNull();
   });
 });
 

@@ -353,7 +353,11 @@ button { font-family: inherit; }
 .pcbadge .dirty { color:var(--warn); font-size:8px; line-height:1; }
 .pcbadge .cln { color:var(--ahead); font-size:8px; line-height:1; opacity:.55; }
 
-.diverge { margin-top:12px; font-size:11.5px; background:var(--warnbg); border:1px solid var(--warnbd); color:var(--warn); padding:7px 10px; border-radius:9px; display:flex; align-items:center; gap:8px; }
+.diverge, .drifting { margin-top:12px; font-size:11.5px; background:var(--warnbg); border:1px solid var(--warnbd); color:var(--warn); padding:7px 10px; border-radius:9px; display:flex; align-items:center; gap:8px; }
+/* Zelfde kalme waarschuwingsstijl als de divergentie-melding: opvallend genoeg
+   om te zien, niet alarmerend (PRD §7). Bewust niet opgetild boven het
+   kaart-overlay — er valt niets te klikken, dus een klik hoort het project
+   gewoon te openen. */
 .pc-card .sync-err { color:var(--navy-err); cursor:default; }
 
 /* ── Niet-git sectie ── */
