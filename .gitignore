@@ -31,3 +31,6 @@ pocketbase/pb_migrations
 *.njsproj
 *.sln
 *.sw?
+
+# Claude Code lokale permissies (per machine, niet delen)
+.claude/settings.local.json

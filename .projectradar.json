@@ -1,0 +1,133 @@
+{
+  "key": "project-radar",
+  "description": "Desktop-app (Tauri 2) die lokale git-projecten over meerdere PC's heen scant en de stand centraliseert in PocketBase/Supabase. Geeft één actueel overzicht van alle projecten — status, stack, links, roadmap — en toont per machine welke versie/branch actief is.",
+  "status": "actief",
+  "stack": [
+    "Tauri 2",
+    "React",
+    "TypeScript",
+    "Vite",
+    "Rust",
+    "PocketBase"
+  ],
+  "roadmap": [
+    {
+      "id": "mvp",
+      "name": "MVP",
+      "milestones": [
+        { "id": "tauri-scaffold", "text": "Tauri 2 + React + Vite desktop-scaffold draait", "done": true },
+        { "id": "git-scan", "text": "Git-scan per project: branch, commit, uncommitted changes", "done": true },
+        { "id": "project-overzicht", "text": "Centraal overzicht met projectkaarten", "done": true },
+        { "id": "pocketbase-sync", "text": "PocketBase-koppeling voor centrale opslag en sync", "done": true },
+        { "id": "handmatige-velden", "text": "Handmatige velden: naam, beschrijving, status, stack, links", "done": true },
+        { "id": "projectradar-json", "text": ".projectradar.json per project lezen voor extra context", "done": true }
+      ]
+    },
+    {
+      "id": "multi-pc",
+      "name": "Multi-PC sync",
+      "milestones": [
+        { "id": "pc-identificatie", "text": "PC-identificatie: elke machine herkenbaar in het overzicht", "done": true },
+        { "id": "divergentie", "text": "Divergentie tonen: welke PC loopt voor/achter", "done": true },
+        { "id": "roadmap-ui", "text": "Roadmap per project: fasen + mijlpalen, afvinkbaar", "done": true }
+      ]
+    },
+    {
+      "id": "extra-features",
+      "name": "Extra features",
+      "milestones": [
+        { "id": "non-git-mappen", "text": "Niet-git-mappen detecteren en tonen als 'nog geen git'", "done": true },
+        { "id": "filter-zoek", "text": "Filteren/sorteren/zoeken op status, stack, datum", "done": true }
+      ]
+    },
+    {
+      "id": "extras-buiten-prd",
+      "name": "Extra's (buiten PRD)",
+      "milestones": [
+        { "id": "ingebouwde-terminal", "text": "Ingebouwde PTY-terminal (bottom-dock met tabs)", "done": true },
+        { "id": "claude-integratie", "text": "Claude Code starten per project + live bezig/idle-status via hooks", "done": true },
+        { "id": "dev-launch", "text": "Dev-server starten en bij webapps automatisch de browser openen", "done": true },
+        { "id": "github-verwijderen", "text": "GitHub-repo verwijderen vanuit de app (PAT met delete_repo)", "done": true }
+      ]
+    },
+    {
+      "id": "kwaliteit",
+      "name": "Kwaliteit & hardening",
+      "milestones": [
+        { "id": "merge-precedence", "text": ".projectradar.json seedt alleen lege velden, overschrijft geen handmatige waarde", "done": true },
+        { "id": "app-hooks", "text": "App.tsx opgesplitst in custom hooks (scan, terminals, claude-status, cloud-sync)", "done": true },
+        { "id": "csp-secrets", "text": "CSP ingeschakeld en GitHub-token niet langer plaintext in localStorage", "done": true },
+        { "id": "scan-parallel", "text": "Repo-scan parallel verwerken voor snelheid bij veel projecten", "done": true },
+        { "id": "tests", "text": "Unit tests voor pure functies (merge, vergelijking, stack-detectie)", "done": true }
+      ]
+    },
+    {
+      "id": "dagelijks-gebruik",
+      "name": "Dagelijks gebruik & UX",
+      "milestones": [
+        { "id": "onboarding", "text": "Onboarding: lege-staat-scherm bij ontbrekende root-map met uitleg en knop", "done": true },
+        { "id": "divergentie-banner", "text": "Divergentie-banner: callout bij project openen als PC's uit sync zijn", "done": true },
+        { "id": "machine-label-ui", "text": "Machine-label tonen en instelbaar in Instellingen", "done": true },
+        { "id": "auto-rescan", "text": "Auto-rescan op instelbaar interval (bijv. 5 min) via UI-instelling", "done": false },
+        { "id": "drifting-badge", "text": "\"Drifting\" badge: status 'actief' maar >14 dagen geen commit", "done": false },
+        { "id": "statistieken", "text": "Statistieken-view: commits/week per project, totaal actieve projecten", "done": false }
+      ]
+    },
+    {
+      "id": "ambient",
+      "name": "Ambient & notificaties",
+      "milestones": [
+        { "id": "system-tray", "text": "System tray: app actief in achtergrond met recente projecten en statusbadges", "done": false },
+        { "id": "global-shortcut", "text": "Globale sneltoets (Cmd+Shift+R): spotlight-achtig projectkiezer boven andere apps", "done": false },
+        { "id": "command-palette", "text": "Command palette (Cmd+K): spring naar project, start Claude, launch dev-server", "done": false },
+        { "id": "os-notificaties", "text": "OS-notificaties bij divergentie of uncommitted changes na herscandop", "done": false },
+        { "id": "autostart", "text": "Autostart bij OS-login + window-state herstel (grootte/positie)", "done": false }
+      ]
+    },
+    {
+      "id": "context-workflow",
+      "name": "Context & workflow",
+      "milestones": [
+        { "id": "pak-de-draad-op", "text": "\"Pak de draad op\" knop: Claude direct laten starten op de eerstvolgende openstaande mijlpaal", "done": true },
+        { "id": "parking-note", "text": "Parking note per project: vrije tekst 'waar ik gebleven was', getoond bij heropening", "done": false },
+        { "id": "active-sprint", "text": "Cross-project 'Active sprint' view: alle open mijlpalen over alle projecten in één lijst", "done": false },
+        { "id": "parking-note-claude", "text": "Parking note automatisch meesturen als context aan Claude bij sessiestart", "done": false }
+      ]
+    },
+    {
+      "id": "git-gezondheid",
+      "name": "Git gezondheid",
+      "milestones": [
+        { "id": "commit-sparkline", "text": "Commit-sparkline (7 dagen) op projectkaart als visuele activiteitsindicator", "done": false },
+        { "id": "stale-branches", "text": "Verouderde branches detecteren: branches >30 dagen zonder commit tonen als badge", "done": false },
+        { "id": "todo-count", "text": "TODO/FIXME-telling als gezondheidsignaal in projectdetail", "done": false }
+      ]
+    },
+    {
+      "id": "roadmap-koppeling",
+      "name": "ROADMAP.md koppeling",
+      "milestones": [
+        { "id": "roadmap-import", "text": "Roadmap importeren uit ROADMAP.md (## headings → fasen, - [ ] → mijlpalen)", "done": false },
+        { "id": "roadmap-export", "text": "Roadmap exporteren naar ROADMAP.md in de repo-root", "done": false }
+      ]
+    },
+    {
+      "id": "schedule-test",
+      "name": "Schedule-test",
+      "milestones": [
+        { "id": "schedule-test-bestand", "text": "Maak SCHEDULE_TEST.md aan met datum/tijd en bevestigingstekst", "done": true }
+      ]
+    },
+    {
+      "id": "distributie",
+      "name": "Distributie",
+      "milestones": [
+        { "id": "app-icon", "text": "App-icon (1024×1024, marineblauw stijl)", "done": false },
+        { "id": "code-signing", "text": "macOS code-signing + notarisatie (Apple Developer account vereist)", "done": false },
+        { "id": "auto-update", "text": "Auto-update via Tauri updater plugin", "done": false },
+        { "id": "build-pipeline", "text": "GitHub Actions build-pipeline (.dmg voor macOS, optioneel .msi/.AppImage)", "done": false },
+        { "id": "splash", "text": "Splash-scherm zodat de app niet wit flitst bij opstarten", "done": false }
+      ]
+    }
+  ]
+}
