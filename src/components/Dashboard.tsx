@@ -1,10 +1,17 @@
 import { useMemo, useState } from "react";
 import type { ClaudeState, NoGitFolder, Project, Status } from "../types";
-import { effectiveStack, statusOf } from "../lib/model";
+import { byRank, effectiveStack, reorderProjects, statusOf } from "../lib/model";
 import ProjectCard from "./ProjectCard";
 
 type Filter = "alle" | Status;
-type Sort = "recent" | "naam";
+type Sort = "recent" | "naam" | "eigen";
+
+const SORT_CYCLE: Record<Sort, Sort> = { recent: "naam", naam: "eigen", eigen: "recent" };
+const SORT_LABEL: Record<Sort, string> = {
+  recent: "Laatst gewijzigd",
+  naam: "Naam",
+  eigen: "Eigen volgorde",
+};
 
 const FILTERS: { key: Filter; label: string }[] = [
   { key: "alle", label: "Alle" },
@@ -34,6 +41,9 @@ interface Props {
   onScan: () => void;
   onOpen: (p: Project) => void;
   onLaunch: (p: Project) => void;
+  onToggleMilestone: (p: Project, phaseId: string, msId: string, done: boolean) => void;
+  /** Nieuwe volgorde van álle projecten, als lijst van keys (index = rang). */
+  onReorder: (keys: string[]) => void;
   onGitInit: (path: string) => void;
   onIgnore: (path: string) => void;
   onOpenPath: (path: string) => void;
@@ -53,6 +63,8 @@ export default function Dashboard({
   onScan,
   onOpen,
   onLaunch,
+  onToggleMilestone,
+  onReorder,
   onGitInit,
   onIgnore,
   onOpenPath,
@@ -61,6 +73,8 @@ export default function Dashboard({
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("alle");
   const [sort, setSort] = useState<Sort>("recent");
+  const [dragKey, setDragKey] = useState<string | null>(null);
+  const [overKey, setOverKey] = useState<string | null>(null);
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -72,13 +86,24 @@ export default function Dashboard({
       const inBranch = p.states.some((s) => (s.branch ?? "").toLowerCase().includes(q));
       return inName || inStack || inBranch;
     });
-    list = [...list].sort((a, b) =>
-      sort === "naam"
-        ? a.name.localeCompare(b.name)
-        : lastActivity(b) - lastActivity(a),
-    );
+    list = [...list].sort((a, b) => {
+      if (sort === "naam") return a.name.localeCompare(b.name);
+      if (sort === "eigen") return byRank(a, b);
+      return lastActivity(b) - lastActivity(a);
+    });
     return list;
   }, [projects, query, filter, sort]);
+
+  // Slepen kan alleen in "Eigen volgorde": in de andere standen zou een
+  // versleepte kaart meteen terugspringen naar zijn gesorteerde plek.
+  const canReorder = sort === "eigen";
+
+  function handleDrop(targetKey: string) {
+    if (!dragKey || dragKey === targetKey) return;
+    onReorder(reorderProjects(projects, dragKey, targetKey));
+    setDragKey(null);
+    setOverKey(null);
+  }
 
   const activeCount = projects.filter((p) => statusOf(p) === "actief").length;
 
@@ -123,24 +148,53 @@ export default function Dashboard({
         <>
           <div className="filters">
             {FILTERS.map((f) => (
-              <span
+              <button
+                type="button"
                 key={f.key}
                 className={`chip${filter === f.key ? " on" : ""}`}
+                aria-pressed={filter === f.key}
                 onClick={() => setFilter(f.key)}
               >
                 {f.label}
-              </span>
+              </button>
             ))}
-            <span
+            <button
+              type="button"
               className="chip"
               style={{ marginLeft: "auto" }}
-              onClick={() => setSort(sort === "recent" ? "naam" : "recent")}
+              onClick={() => setSort(SORT_CYCLE[sort])}
             >
-              Sorteer: {sort === "recent" ? "Laatst gewijzigd" : "Naam"} ▾
-            </span>
+              Sorteer: {SORT_LABEL[sort]} ▾
+            </button>
           </div>
 
-          {visible.length === 0 ? (
+          {canReorder && visible.length > 1 && (
+            <p className="hint drag-hint">Sleep kaarten om je eigen volgorde te bepalen.</p>
+          )}
+
+          {scanning && projects.length === 0 ? (
+            <div className="grid">
+              {Array.from({ length: 6 }, (_, i) => (
+                <div className="card skel-card" key={i} aria-hidden>
+                  <div className="skel-head">
+                    <div className="skel w-55" />
+                    <div className="skel w-20" />
+                  </div>
+                  <div className="skel w-90 mt-10" />
+                  <div className="skel w-70 mt-6" />
+                  <div className="skel-tags">
+                    <div className="skel w-18" />
+                    <div className="skel w-22" />
+                  </div>
+                  <div className="skel w-100 mt-14" style={{ height: 6, borderRadius: 99 }} />
+                  <div className="skel-meta">
+                    <div className="skel w-30" />
+                    <div className="skel w-25" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : visible.length === 0 ? (
             <div className="empty">
               <h2>Geen projecten gevonden</h2>
               <p>Pas je zoekopdracht of filter aan, of scan opnieuw.</p>
@@ -148,13 +202,27 @@ export default function Dashboard({
           ) : (
             <div className="grid">
               {visible.map((p) => (
-                <ProjectCard
+                <div
                   key={p.key}
-                  project={p}
-                  claudeState={claudeByKey[p.key] ?? null}
-                  onOpen={onOpen}
-                  onLaunch={onLaunch}
-                />
+                  className={`drag-wrap${canReorder ? " on" : ""}${dragKey === p.key ? " dragging" : ""}${overKey === p.key && dragKey !== p.key ? " over" : ""}`}
+                  draggable={canReorder}
+                  onDragStart={() => setDragKey(p.key)}
+                  onDragEnd={() => { setDragKey(null); setOverKey(null); }}
+                  onDragOver={(e) => {
+                    if (!canReorder || !dragKey) return;
+                    e.preventDefault(); // zonder dit vuurt onDrop niet
+                    if (overKey !== p.key) setOverKey(p.key);
+                  }}
+                  onDrop={(e) => { e.preventDefault(); handleDrop(p.key); }}
+                >
+                  <ProjectCard
+                    project={p}
+                    claudeState={claudeByKey[p.key] ?? null}
+                    onOpen={onOpen}
+                    onLaunch={onLaunch}
+                    onToggleMilestone={onToggleMilestone}
+                  />
+                </div>
               ))}
             </div>
           )}

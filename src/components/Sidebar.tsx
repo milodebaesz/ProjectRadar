@@ -1,5 +1,6 @@
 import type { MachineInfo } from "../types";
 import { relativeTime } from "../lib/format";
+import type { TermSpec } from "./TerminalDock";
 
 export type View = "overzicht" | "instellingen";
 
@@ -13,6 +14,12 @@ interface Props {
   lastScan: string | null;
   scanning: boolean;
   synced: boolean;
+  /** Laatste cloud-sync-fout; blijft staan tot een geslaagde sync (null). */
+  syncError: string | null;
+  /** Actieve terminal-processen (voor de "actieve processen"-lijst). */
+  terminals?: TermSpec[];
+  activeTermId?: string | null;
+  onSelectTerminal?: (id: string) => void;
 }
 
 export default function Sidebar({
@@ -25,6 +32,10 @@ export default function Sidebar({
   lastScan,
   scanning,
   synced,
+  syncError,
+  terminals = [],
+  activeTermId = null,
+  onSelectTerminal,
 }: Props) {
   const name = machineLabel || machine?.hostname || "Deze PC";
   return (
@@ -47,6 +58,22 @@ export default function Sidebar({
           <span className="ic">⚙</span> Instellingen
         </button>
       </nav>
+      {terminals.length > 0 && (
+        <div className="term-list">
+          <div className="term-list-title">Actieve processen</div>
+          {terminals.map((t) => (
+            <button
+              key={t.id}
+              className={`term-list-item${t.id === activeTermId ? " on" : ""}`}
+              onClick={() => onSelectTerminal?.(t.id)}
+              title={t.cwd}
+            >
+              <span className="dot" />
+              <span className="lbl">{t.title}</span>
+            </button>
+          ))}
+        </div>
+      )}
       <div className="spacer" />
       <div className="pc-card">
         <div className="row">
@@ -62,6 +89,11 @@ export default function Sidebar({
         <div className="row" style={{ marginTop: 9, color: synced ? "var(--ahead)" : "var(--txt-faint)" }}>
           {synced ? "☁ Gesynct" : "○ Alleen lokaal"}
         </div>
+        {syncError && (
+          <div className="row sync-err" title={syncError} style={{ marginTop: 6 }}>
+            ⚠ Sync mislukt
+          </div>
+        )}
       </div>
     </aside>
   );

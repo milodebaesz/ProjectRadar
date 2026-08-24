@@ -7,6 +7,7 @@ import {
   compareStates,
   roadmapProgress,
   localPath,
+  nextOpenPhase,
 } from "../lib/model";
 import { relativeTime } from "../lib/format";
 
@@ -25,17 +26,21 @@ export default function ProjectCard({
   claudeState,
   onOpen,
   onLaunch,
+  onToggleMilestone,
 }: {
   project: Project;
   claudeState: ClaudeState | null;
   onOpen: (p: Project) => void;
   onLaunch: (p: Project) => void;
+  onToggleMilestone: (p: Project, phaseId: string, msId: string, done: boolean) => void;
 }) {
   const status = statusOf(project);
   const stack = effectiveStack(project);
   const cmp = compareStates(project);
   const progress = roadmapProgress(project);
   const canLaunch = !!localPath(project);
+  const next = nextOpenPhase(project.meta.roadmap ?? []);
+  const nextMilestone = next?.milestones[0] ?? null;
   // De stand op deze PC (lokaal is er precies één).
   const primary =
     project.states.find((s) => s.isThisPc) ?? project.states[0];
@@ -90,6 +95,21 @@ export default function ProjectCard({
         </div>
       )}
 
+      {nextMilestone && next && (
+        <label
+          className="next-milestone"
+          title="Direct afvinken zonder het project te openen"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <input
+            type="checkbox"
+            checked={false}
+            onChange={(e) => onToggleMilestone(project, next.phase.id, nextMilestone.id, e.target.checked)}
+          />
+          <span>{nextMilestone.text}</span>
+        </label>
+      )}
+
       {project.states.length > 0 && (
         <div className="pcs">
           <span className="lbl">Op:</span>
@@ -100,6 +120,11 @@ export default function ProjectCard({
                 {s.machine}
                 {s.ahead > 0 && <span className="ah">▲{s.ahead}</span>}
                 {s.behind > 0 && <span className="bh">▼{s.behind}</span>}
+                {s.hasUncommitted ? (
+                  <span className="dirty" title="niet-gecommitte wijzigingen">●</span>
+                ) : (
+                  <span className="cln" title="schoon">●</span>
+                )}
               </span>
             );
           })}
@@ -118,6 +143,11 @@ export default function ProjectCard({
                 <span className="changes">● niet-gecommit</span>
               ) : (
                 <span className="clean">● schoon</span>
+              )}
+              {primary.weeklyCommits > 0 && (
+                <span className="weekly" title="Commits in de afgelopen 7 dagen">
+                  🔥 {primary.weeklyCommits} deze week
+                </span>
               )}
             </>
           ) : (

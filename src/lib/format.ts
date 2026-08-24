@@ -24,10 +24,17 @@ export function relativeTime(iso: string | null): string {
   if (day < 7) return `${day} dgn geleden`;
   if (wk < 5) return `${wk} ${wk === 1 ? "week" : "wkn"} geleden`;
   if (mo < 12) return `${mo} ${mo === 1 ? "maand" : "mnd"} geleden`;
-  return `${yr} ${yr === 1 ? "jaar" : "jaar"} geleden`;
+  return `${yr} jaar geleden`;
 }
 
 /** Genereer een korte unieke id (voor fasen/mijlpalen). */
 export function uid(): string {
   return Math.random().toString(36).slice(2, 10);
+}
+
+/** Korte Nederlandse weergave van een geplande (toekomstige) datum/tijd. */
+export function formatScheduled(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleString("nl-NL", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 }

@@ -1,6 +1,7 @@
 import { pb } from "./pocketbase";
 import type { MachineInfo, PcState, Project, ProjectMeta, RepoInfo, Status } from "../types";
 import { projectKey } from "./format";
+import { normalizeRoadmap } from "./model";
 
 // Push (lokale scan → cloud) en pull (cloud → overzicht) tegen PocketBase.
 // De roadmap en handmatige velden leven als velden op het `projects`-record;
@@ -91,6 +92,7 @@ async function upsertState(projectId: string, machineId: string, repo: RepoInfo)
     last_commit_hash: repo.last_commit_hash ?? "",
     last_commit_date: repo.last_commit_date ?? "",
     total_commits: repo.total_commits,
+    weekly_commits: repo.weekly_commits,
     has_uncommitted: repo.has_uncommitted,
     ahead: repo.ahead,
     behind: repo.behind,
@@ -98,6 +100,29 @@ async function upsertState(projectId: string, machineId: string, repo: RepoInfo)
   };
   if (found.length) return pb.collection("project_states").update(found[0].id, data);
   return pb.collection("project_states").create(data);
+}
+
+/**
+ * Volledige cloud-ronde voor één scan: push deze PC naar de cloud, haal het
+ * gecombineerde overzicht weer op, en plak de lokaal gedetecteerde stack/
+ * start-commando/dev-URL terug (die leven niet in de cloud, alleen op deze PC).
+ */
+export async function syncScan(
+  repos: RepoInfo[],
+  info: MachineInfo,
+  label: string,
+): Promise<Project[]> {
+  await pushScan(repos, info, label);
+  const cloud = await fetchProjects(info.hostname);
+  const det = new Map(repos.map((r) => [projectKey(r.name), r.detected_stack]));
+  const runCmd = new Map(repos.map((r) => [projectKey(r.name), r.default_run_command]));
+  const devUrl = new Map(repos.map((r) => [projectKey(r.name), r.default_dev_url]));
+  for (const p of cloud) {
+    p.detectedStack = det.get(p.key) ?? [];
+    p.defaultRunCommand = runCmd.get(p.key) ?? null;
+    p.defaultDevUrl = devUrl.get(p.key) ?? null;
+  }
+  return cloud;
 }
 
 /** Schrijf de scan van deze PC weg naar de cloud. */
@@ -132,6 +157,7 @@ export async function fetchProjects(thisHostname: string): Promise<Project[]> {
       lastCommitDate: s.last_commit_date || null,
       lastCommitHash: s.last_commit_hash || null,
       totalCommits: s.total_commits || 0,
+      weeklyCommits: s.weekly_commits || 0,
       hasUncommitted: !!s.has_uncommitted,
       ahead: s.ahead || 0,
       behind: s.behind || 0,
@@ -150,7 +176,8 @@ export async function fetchProjects(thisHostname: string): Promise<Project[]> {
       status: (p.status || "idee") as Status,
       stack: stack.length ? stack : undefined,
       links: { repo: p.repo_url || undefined, deploy: p.deploy_url || undefined },
-      roadmap: Array.isArray(p.roadmap) ? p.roadmap : [],
+      roadmap: Array.isArray(p.roadmap) ? normalizeRoadmap(p.roadmap) : [],
+      rank: typeof p.rank === "number" && p.rank >= 0 ? p.rank : undefined,
     };
     return {
       key: p.key,
@@ -192,5 +219,7 @@ export async function saveProjectMeta(meta: ProjectMeta) {
     repo_url: meta.links?.repo ?? "",
     deploy_url: meta.links?.deploy ?? "",
     roadmap: meta.roadmap ?? [],
+    // -1 = "nooit gesleept"; PocketBase kent geen null voor number-velden.
+    rank: meta.rank ?? -1,
   });
 }

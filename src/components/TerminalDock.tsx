@@ -4,14 +4,29 @@ import { listen } from "@tauri-apps/api/event";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
-import { ptySpawn, ptyWrite, ptyResize, ptyKill } from "../lib/tauri";
+import { ptySpawn, ptyWrite, ptyResize, ptyKill, nightlyRead } from "../lib/tauri";
 
 export interface TermSpec {
   id: string; // frontend-id (uuid)
   title: string;
   cwd: string;
   initialCommand?: string;
+  /**
+   * Rust-sessie-id van een nachtelijke (PromptPad) run i.p.v. een interactieve
+   * PTY. Als dit gezet is, negeert de tab `cwd`/`initialCommand` en toont hij
+   * in plaats daarvan een alleen-lezen weergave: gepold via `nightlyRead`
+   * i.p.v. live gestreamd via `ptySpawn`, omdat de sessie al liep vóór er een
+   * webview was om 'm aan te bieden (zie nightly.rs).
+   */
+  managedId?: number;
 }
+
+// Moet in sync blijven met MANAGED_COLS/MANAGED_ROWS in src-tauri/src/pty.rs.
+// De managed-viewer past zich bewust niet aan het paneel aan (geen fit(),
+// geen resize teruggestuurd naar de PTY) — zie de comment daar voor waarom
+// een mismatch hier tot door elkaar lopende tekst leidt.
+const MANAGED_COLS = 100;
+const MANAGED_ROWS = 32;
 
 const TERM_THEME = {
   background: "#0a1424",
@@ -50,6 +65,42 @@ function TerminalView({ spec, active, onExit }: { spec: TermSpec; active: boolea
 
     let disposed = false;
     let unlisten: (() => void) | null = null;
+
+    // Nachtelijke (managed) sessie: geen ptySpawn/Channel, alleen pollen. Geen
+    // term.onData-koppeling, dus toetsaanslagen gaan nergens heen — bewust
+    // read-only, dit is een venster op een run die al liep, geen console erop.
+    if (spec.managedId != null) {
+      const id = spec.managedId;
+      // Vast formaat, gelijk aan de PTY die Rust al opende (zie pty.rs) —
+      // bewust GEEN fit()/ResizeObserver: die zouden xterm.js lokaal een
+      // ander aantal kolommen/rijen geven dan waar de sessie al vanuit
+      // schrijft, wat cursor-verplaatsingen op de verkeerde plek laat landen.
+      term.resize(MANAGED_COLS, MANAGED_ROWS);
+      term.write("\x1b[2m— nachtelijke run, alleen-lezen —\x1b[0m\r\n");
+      let offset = 0;
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      async function poll() {
+        if (disposed) return;
+        try {
+          const { chunk, nextOffset, status } = await nightlyRead(id, offset);
+          if (chunk) term.write(chunk);
+          offset = nextOffset;
+          if (status !== "running") {
+            term.write(`\r\n\x1b[2m— sessie ${status === "done" ? "afgerond" : "mislukt"} —\x1b[0m\r\n`);
+            return; // stopt de poll-lus; de tab blijft staan zodat je kunt terugkijken
+          }
+        } catch {
+          /* sessie (nog) niet gevonden of tijdelijk onbereikbaar; volgende tick opnieuw */
+        }
+        if (!disposed) timer = setTimeout(poll, 1500);
+      }
+      poll();
+      return () => {
+        disposed = true;
+        if (timer) clearTimeout(timer);
+        term.dispose();
+      };
+    }
 
     requestAnimationFrame(() => {
       try {
@@ -102,7 +153,9 @@ function TerminalView({ spec, active, onExit }: { spec: TermSpec; active: boolea
 
   // Bij actief worden: opnieuw passen op de (nu zichtbare) container.
   useEffect(() => {
-    if (!active) return;
+    // Managed (nachtelijke) tabs hebben een vast formaat — niet meefitten
+    // aan het paneel, zie de toelichting bovenaan de managed-tak hierboven.
+    if (!active || spec.managedId != null) return;
     requestAnimationFrame(() => {
       try {
         fitRef.current?.fit();
@@ -113,7 +166,7 @@ function TerminalView({ spec, active, onExit }: { spec: TermSpec; active: boolea
         /* leeg */
       }
     });
-  }, [active]);
+  }, [active, spec.managedId]);
 
   return <div ref={hostRef} className="term-host" style={{ display: active ? "block" : "none" }} />;
 }

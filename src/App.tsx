@@ -1,189 +1,99 @@
 import { useEffect, useMemo, useState } from "react";
-import type { ClaudeState, MachineInfo, Project, ProjectMeta, ScanResult, Settings as SettingsType } from "./types";
+import type { Project, ProjectMeta } from "./types";
+import { uid } from "./lib/format";
 import Sidebar, { type View } from "./components/Sidebar";
 import Dashboard from "./components/Dashboard";
 import SettingsView from "./components/Settings";
 import ProjectDetail from "./components/ProjectDetail";
-import { buildProjects, localPath, runCommandOf, devUrlOf, portFromUrl, buildClaudePrompt } from "./lib/model";
-import { projectKey, uid } from "./lib/format";
+import { localPath, runCommandOf, devUrlOf, portFromUrl, buildClaudePrompt, toggleMilestone } from "./lib/model";
 import {
   isTauri,
-  machineInfo as fetchMachineInfo,
-  scanRoots,
   gitInit,
   pickFolder,
   openPath,
   claudeShellLine,
-  claudeStatus,
   trashPath,
   waitForPort,
   openBrowser,
+  secretGet,
+  secretSet,
+  GITHUB_TOKEN_KEY,
 } from "./lib/tauri";
-import TerminalDock, { type TermSpec } from "./components/TerminalDock";
+import TerminalDock from "./components/TerminalDock";
 import { deleteGithubRepo } from "./lib/github";
 import type { DeleteOptions } from "./components/DeleteDialog";
-import {
-  loadSettings,
-  saveSettings,
-  loadAllMeta,
-  saveMeta,
-  loadIgnored,
-  addIgnored,
-  loadTheme,
-  saveTheme,
-} from "./lib/storage";
-import {
-  pbEnabled,
-  currentUser,
-  isLoggedIn,
-  login as pbLogin,
-  logout as pbLogout,
-  onAuthChange,
-} from "./lib/pocketbase";
-import { pushScan, fetchProjects, saveProjectMeta, deleteProjectFromCloud } from "./lib/sync";
+import { saveMeta, takeLegacyGithubToken } from "./lib/storage";
+import { pbEnabled, isLoggedIn, login as pbLogin, logout as pbLogout } from "./lib/pocketbase";
+import { saveProjectMeta, deleteProjectFromCloud } from "./lib/sync";
+import { useTheme } from "./hooks/useTheme";
+import { useAuth } from "./hooks/useAuth";
+import { useScan } from "./hooks/useScan";
+import { useTerminals } from "./hooks/useTerminals";
+import { useClaudeStatus } from "./hooks/useClaudeStatus";
+import { useScheduledRuns } from "./hooks/useScheduledRuns";
+import { useRemoteBridge } from "./hooks/useRemoteBridge";
+import { useNightlyRuns } from "./hooks/useNightlyRuns";
 
 export default function App() {
   const tauri = isTauri();
 
-  const [theme, setTheme] = useState<"light" | "dark">("light");
+  const { theme, toggleTheme } = useTheme();
+  const userEmail = useAuth();
+
   const [view, setView] = useState<View>("overzicht");
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-
-  const [settings, setSettings] = useState<SettingsType>({ roots: [], machineLabel: "" });
-  const [machine, setMachine] = useState<MachineInfo | null>(null);
-  const [scan, setScan] = useState<ScanResult | null>(null);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [scanning, setScanning] = useState(false);
-  const [lastScan, setLastScan] = useState<string | null>(null);
-  const [ignored, setIgnored] = useState<string[]>([]);
   const [toast, setToast] = useState<string | null>(null);
-  const [userEmail, setUserEmail] = useState<string | null>(currentUser()?.email ?? null);
-  const [claudeRows, setClaudeRows] = useState<Record<string, { state: string; ts: number }>>({});
-
-  // ── Ingebouwde terminal (bottom-dock met tabs) ──
-  const [terminals, setTerminals] = useState<TermSpec[]>([]);
-  const [activeTermId, setActiveTermId] = useState<string | null>(null);
-  const [dockOpen, setDockOpen] = useState(false);
-
-  function openTerminal(spec: Omit<TermSpec, "id">) {
-    const id = uid();
-    setTerminals((prev) => [...prev, { ...spec, id }]);
-    setActiveTermId(id);
-    setDockOpen(true);
-  }
-
-  function removeTerminal(id: string) {
-    setTerminals((prev) => {
-      const next = prev.filter((t) => t.id !== id);
-      setActiveTermId((cur) => (cur === id ? next[next.length - 1]?.id ?? null : cur));
-      return next;
-    });
-  }
-
-  function newPlainTerminal() {
-    // Lege cwd → de backend valt terug op de home-map.
-    openTerminal({ title: "shell", cwd: settings.roots[0] ?? "" });
-  }
-
-  const machineName = settings.machineLabel || machine?.hostname || "Deze PC";
-
-  // ── Init ──
-  useEffect(() => {
-    const t = loadTheme();
-    setTheme(t);
-    document.documentElement.setAttribute("data-theme", t);
-
-    const s = loadSettings();
-    setSettings(s);
-    setIgnored(loadIgnored());
-
-    const unsub = onAuthChange(() => setUserEmail(currentUser()?.email ?? null));
-
-    (async () => {
-      if (tauri) {
-        try {
-          setMachine(await fetchMachineInfo());
-        } catch {
-          /* negeer */
-        }
-      }
-      if (s.roots.length) runScan(s);
-    })();
-
-    return unsub;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const [hasGithubToken, setHasGithubToken] = useState(false);
 
   function showToast(msg: string) {
     setToast(msg);
     window.setTimeout(() => setToast(null), 2800);
   }
 
-  function toggleTheme() {
-    const next = theme === "dark" ? "light" : "dark";
-    setTheme(next);
-    saveTheme(next);
-    document.documentElement.setAttribute("data-theme", next);
-  }
-
-  async function runScan(s: SettingsType = settings) {
-    if (!tauri) {
-      showToast("Scannen werkt alleen in de desktop-app.");
-      return;
-    }
-    if (!s.roots.length) return;
-    setScanning(true);
-    try {
-      const result = await scanRoots(s.roots);
-      setScan(result);
-
-      // Verwijderde projecten zijn op pad genegeerd; niet opnieuw tonen/pushen.
-      const ign = loadIgnored();
-      const repos = result.repos.filter((r) => !ign.includes(r.path));
-
-      const info = machine ?? (await fetchMachineInfo().catch(() => null));
-      const label = s.machineLabel || info?.hostname || "Deze PC";
-      const local = buildProjects(repos, loadAllMeta(), label);
-
-      if (isLoggedIn() && info) {
+  // GitHub-token: migreer een eventueel oud plaintext-token naar de OS-keychain
+  // en bepaal of er een token beschikbaar is voor de verwijder-actie.
+  useEffect(() => {
+    if (!tauri) return;
+    (async () => {
+      const legacy = takeLegacyGithubToken();
+      if (legacy) {
         try {
-          await pushScan(repos, info, s.machineLabel);
-          const cloud = await fetchProjects(info.hostname);
-          // Behoud de lokaal gedetecteerde stack voor weergave.
-          const det = new Map(repos.map((r) => [projectKey(r.name), r.detected_stack]));
-          const runCmd = new Map(
-            repos.map((r) => [projectKey(r.name), r.default_run_command]),
-          );
-          const devUrl = new Map(
-            repos.map((r) => [projectKey(r.name), r.default_dev_url]),
-          );
-          cloud.forEach((p) => {
-            p.detectedStack = det.get(p.key) ?? [];
-            p.defaultRunCommand = runCmd.get(p.key) ?? null;
-            p.defaultDevUrl = devUrl.get(p.key) ?? null;
-          });
-          setProjects(cloud);
-        } catch (e) {
-          showToast(`Cloud-sync mislukt, lokaal getoond: ${e}`);
-          setProjects(local);
+          await secretSet(GITHUB_TOKEN_KEY, legacy);
+        } catch {
+          /* negeer; token blijft dan onbeschikbaar */
         }
-      } else {
-        setProjects(local);
       }
-      setLastScan(new Date().toISOString());
-    } catch (e) {
-      showToast(`Scan mislukt: ${e}`);
-    } finally {
-      setScanning(false);
-    }
-  }
+      try {
+        setHasGithubToken(!!(await secretGet(GITHUB_TOKEN_KEY)));
+      } catch {
+        /* negeer */
+      }
+    })();
+  }, [tauri]);
 
-  function updateSettings(next: SettingsType) {
-    const rootsChanged = next.roots.join("|") !== settings.roots.join("|");
-    setSettings(next);
-    saveSettings(next);
-    if (rootsChanged) runScan(next);
-  }
+  const {
+    settings,
+    machine,
+    scan,
+    projects,
+    setProjects,
+    scanning,
+    lastScan,
+    ignored,
+    syncError,
+    runScan,
+    updateSettings,
+    ignorePath,
+  } = useScan(tauri, showToast);
+
+  const term = useTerminals(settings.roots[0] ?? "");
+  const claudeByKey = useClaudeStatus(tauri, projects, (key) => {
+    const p = projects.find((x) => x.key === key);
+    showToast(`${p?.name ?? "Project"}: Claude is klaar — roadmap wordt bijgewerkt…`);
+    runScan();
+  });
+
+  const machineName = settings.machineLabel || machine?.hostname || "Deze PC";
 
   function handleSaveMeta(meta: ProjectMeta) {
     saveMeta(meta); // lokale cache
@@ -191,6 +101,30 @@ export default function App() {
     if (isLoggedIn()) {
       saveProjectMeta(meta).catch((e) => showToast(`Opslaan in cloud mislukt: ${e}`));
     }
+  }
+
+  function handleToggleMilestone(p: Project, phaseId: string, msId: string, done: boolean) {
+    handleSaveMeta(toggleMilestone(p.meta, phaseId, msId, done));
+  }
+
+  /**
+   * Slaat de handmatige dashboardvolgorde op. Schrijft élk project weg, ook de
+   * niet-verplaatste: de rangen worden hernummerd naar 0..n-1, zodat er geen
+   * gaten of dubbele posities ontstaan bij een volgende sleep.
+   */
+  function handleReorder(keys: string[]) {
+    const rankOf = new Map(keys.map((key, i) => [key, i]));
+    const updated = projects.map((p) => {
+      const rank = rankOf.get(p.key);
+      if (rank === undefined || p.meta.rank === rank) return p;
+      const meta = { ...p.meta, key: p.key, rank };
+      saveMeta(meta);
+      if (isLoggedIn()) {
+        saveProjectMeta(meta).catch((e) => showToast(`Volgorde opslaan in cloud mislukt: ${e}`));
+      }
+      return { ...p, meta };
+    });
+    setProjects(updated);
   }
 
   async function handleGitInit(path: string) {
@@ -214,7 +148,7 @@ export default function App() {
       return;
     }
     const command = runCommandOf(p);
-    openTerminal({ title: `dev · ${p.name}`, cwd: path, initialCommand: command });
+    term.openTerminal({ title: `dev · ${p.name}`, cwd: path, initialCommand: command });
     showToast(`Start: ${command}`);
 
     // Webapp? Wacht tot de dev-server luistert en open dan de browser.
@@ -235,7 +169,14 @@ export default function App() {
     }
   }
 
-  async function handleClaude(p: Project, instruction: string) {
+  /** Voeg een run toe aan de per-project geschiedenis (nieuwste eerst, max 100). */
+  function logClaudeRun(p: Project, label: string) {
+    const entry = { id: uid(), at: new Date().toISOString(), label };
+    const history = [entry, ...(p.meta.history ?? [])].slice(0, 100);
+    handleSaveMeta({ ...p.meta, key: p.key, history });
+  }
+
+  async function handleClaude(p: Project, instruction: string, label?: string) {
     if (!tauri) {
       showToast("Claude openen werkt alleen in de desktop-app.");
       return;
@@ -247,12 +188,17 @@ export default function App() {
     }
     try {
       const line = await claudeShellLine(path, buildClaudePrompt(p, instruction));
-      openTerminal({ title: `Claude · ${p.name}`, cwd: path, initialCommand: line });
+      term.openTerminal({ title: `Claude · ${p.name}`, cwd: path, initialCommand: line });
       showToast("Claude geopend in de terminal.");
+      logClaudeRun(p, label?.trim() || instruction.trim().split("\n")[0].slice(0, 140) || "Doorwerken (geen instructie)");
     } catch (e) {
       showToast(`Claude openen mislukt: ${e}`);
     }
   }
+
+  useScheduledRuns(tauri, projects, handleSaveMeta, showToast);
+  useRemoteBridge(tauri, projects, claudeByKey, handleToggleMilestone, handleClaude);
+  useNightlyRuns(tauri, projects, term.openTerminal);
 
   async function handleDelete(p: Project, opts: DeleteOptions) {
     const path = localPath(p);
@@ -265,16 +211,16 @@ export default function App() {
       }
       // 2. GitHub-repo definitief verwijderen (onomkeerbaar, dus als laatste).
       if (opts.deleteGithub) {
-        await deleteGithubRepo(p.remoteUrl, settings.githubToken ?? "");
+        const token = (await secretGet(GITHUB_TOKEN_KEY)) ?? "";
+        await deleteGithubRepo(p.remoteUrl, token);
       }
       // 3. Uit het overzicht: pad negeren zodat een rescan het niet terughaalt,
       //    en het cloud-record opruimen.
-      if (path) addIgnored(path);
+      if (path) ignorePath(path);
       if (isLoggedIn()) await deleteProjectFromCloud(p.key);
 
       setProjects((prev) => prev.filter((x) => x.key !== p.key));
       setSelectedKey(null);
-      setIgnored(loadIgnored());
       showToast(`'${p.name}' verwijderd.`);
     } catch (e) {
       showToast(`Verwijderen mislukt: ${e}`);
@@ -282,67 +228,16 @@ export default function App() {
     }
   }
 
-  function handleIgnore(path: string) {
-    addIgnored(path);
-    setIgnored((prev) => [...prev, path]);
-  }
-
   async function handleLogin(email: string, password: string) {
     await pbLogin(email, password);
-    setUserEmail(currentUser()?.email ?? null);
     showToast("Ingelogd. Synchroniseren…");
     await runScan();
   }
 
   function handleLogout() {
     pbLogout();
-    setUserEmail(null);
     runScan();
   }
-
-  function openProject(p: Project) {
-    setSelectedKey(p.key);
-  }
-
-  // Live Claude-status: pollt de hook-statusbestanden via de backend.
-  useEffect(() => {
-    if (!tauri) return;
-    let active = true;
-    const tick = async () => {
-      try {
-        const rows = await claudeStatus();
-        if (active) {
-          setClaudeRows(Object.fromEntries(rows.map((r) => [r.path, { state: r.state, ts: r.ts }])));
-        }
-      } catch {
-        /* negeer */
-      }
-    };
-    tick();
-    const id = window.setInterval(tick, 2500);
-    return () => {
-      active = false;
-      window.clearInterval(id);
-    };
-  }, [tauri]);
-
-  // Claude-status per project-key (op lokaal pad gematcht; oude leftovers weg).
-  const claudeByKey = useMemo(() => {
-    const now = Date.now() / 1000;
-    const m: Record<string, ClaudeState> = {};
-    for (const p of projects) {
-      const path = localPath(p);
-      if (!path) continue;
-      const row = claudeRows[path];
-      if (!row || now - row.ts > 8 * 3600) continue;
-      // "busy" dat >10 min niet ververst is, behandelen we als idle (mogelijk
-      // afgebroken sessie of Claude wacht op input).
-      const age = now - row.ts;
-      if (row.state === "busy") m[p.key] = age > 600 ? "idle" : "busy";
-      else if (row.state === "idle") m[p.key] = "idle";
-    }
-    return m;
-  }, [projects, claudeRows]);
 
   const selected = useMemo(
     () => projects.find((p) => p.key === selectedKey) ?? null,
@@ -366,7 +261,7 @@ export default function App() {
   }
 
   return (
-    <div className={`app${tauri ? " has-dock" : ""}${tauri && dockOpen ? " dock-open" : ""}`}>
+    <div className={`app${tauri ? " has-dock" : ""}${tauri && term.dockOpen ? " dock-open" : ""}`}>
       <Sidebar
         view={view}
         onNav={nav}
@@ -377,6 +272,13 @@ export default function App() {
         lastScan={lastScan}
         scanning={scanning}
         synced={!!userEmail}
+        syncError={syncError}
+        terminals={term.terminals}
+        activeTermId={term.activeTermId}
+        onSelectTerminal={(id) => {
+          term.setActiveTermId(id);
+          term.setDockOpen(true);
+        }}
       />
 
       {selected ? (
@@ -384,7 +286,7 @@ export default function App() {
           key={selected.key}
           project={selected}
           claudeState={claudeByKey[selected.key] ?? null}
-          hasGithubToken={!!settings.githubToken}
+          hasGithubToken={hasGithubToken}
           onBack={() => setSelectedKey(null)}
           onSave={handleSaveMeta}
           onOpenPath={openPath}
@@ -404,6 +306,7 @@ export default function App() {
           onRescan={() => runScan()}
           onLogin={handleLogin}
           onLogout={handleLogout}
+          onTokenSaved={setHasGithubToken}
         />
       ) : (
         <Dashboard
@@ -417,10 +320,12 @@ export default function App() {
           hasRoots={settings.roots.length > 0}
           onToggleTheme={toggleTheme}
           onScan={() => runScan()}
-          onOpen={openProject}
+          onOpen={(p) => setSelectedKey(p.key)}
           onLaunch={handleLaunch}
+          onToggleMilestone={handleToggleMilestone}
+          onReorder={handleReorder}
           onGitInit={handleGitInit}
-          onIgnore={handleIgnore}
+          onIgnore={ignorePath}
           onOpenPath={openPath}
           onGoSettings={() => setView("instellingen")}
         />
@@ -428,14 +333,14 @@ export default function App() {
 
       {tauri && (
         <TerminalDock
-          terminals={terminals}
-          activeId={activeTermId}
-          open={dockOpen}
-          onSelect={setActiveTermId}
-          onClose={removeTerminal}
-          onExit={removeTerminal}
-          onNew={newPlainTerminal}
-          onToggle={() => setDockOpen((o) => !o)}
+          terminals={term.terminals}
+          activeId={term.activeTermId}
+          open={term.dockOpen}
+          onSelect={term.setActiveTermId}
+          onClose={term.removeTerminal}
+          onExit={term.removeTerminal}
+          onNew={term.newPlainTerminal}
+          onToggle={() => term.setDockOpen(!term.dockOpen)}
         />
       )}
 

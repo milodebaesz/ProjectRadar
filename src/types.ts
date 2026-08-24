@@ -9,6 +9,8 @@ export interface RepoInfo {
   last_commit_message: string | null;
   last_commit_date: string | null; // ISO-8601
   total_commits: number;
+  /** Aantal commits in de afgelopen 7 dagen. */
+  weekly_commits: number;
   has_uncommitted: boolean;
   remote_url: string | null;
   has_upstream: boolean;
@@ -62,7 +64,19 @@ export interface Phase {
   id: string;
   name: string;
   target?: string; // optionele streefdatum (vrije tekst / ISO)
+  /** Sprint/fase tijdelijk gepauzeerd — wordt overgeslagen door "Pak de draad op". */
+  onHold?: boolean;
+  /** ISO-datetime: geplande automatische start van deze sprint via Claude. */
+  scheduledAt?: string;
   milestones: Milestone[];
+}
+
+/** Eén Claude-run die via ProjectRadar is gestart (log-item). */
+export interface HistoryEntry {
+  id: string;
+  at: string; // ISO-datetime
+  /** Korte omschrijving: sprintnaam, mijlpaal, of het begin van de vrije instructie. */
+  label: string;
 }
 
 export interface ProjectMeta {
@@ -76,9 +90,21 @@ export interface ProjectMeta {
   runCommand?: string;
   /** URL die na het starten in de browser opent (leeg = geen browser). */
   devUrl?: string;
+  /** Project-specifieke instructies voor Claude bij het genereren/checken van de roadmap. */
+  claudeInstructions?: string;
+  /** Project-specifieke instructies voor Claude bij het checken van design/UI/UX. */
+  designInstructions?: string;
+  /** Log van Claude-runs via ProjectRadar, nieuwste eerst. */
+  history?: HistoryEntry[];
+  /**
+   * Handmatige positie in het dashboard (0 = bovenaan), gezet door te slepen
+   * in de sorteerstand "Eigen volgorde". Leeg voor projecten die nooit
+   * gesleept zijn; die zakken naar onderen.
+   */
+  rank?: number;
 }
 
-// ── Per-PC git-stand (lokaal nu, later vanuit Supabase aangevuld) ──
+// ── Per-PC git-stand (lokale scan, aangevuld vanuit PocketBase) ──
 
 export interface PcState {
   machine: string; // hostname/label
@@ -89,6 +115,8 @@ export interface PcState {
   lastCommitDate: string | null;
   lastCommitHash: string | null;
   totalCommits: number;
+  /** Aantal commits in de afgelopen 7 dagen. */
+  weeklyCommits: number;
   hasUncommitted: boolean;
   ahead: number;
   behind: number;
@@ -112,6 +140,6 @@ export interface Project {
 export interface Settings {
   roots: string[];
   machineLabel: string;
-  /** GitHub Personal Access Token (scope delete_repo) voor repo-verwijdering. */
-  githubToken?: string;
+  /** Auto-rescan interval in minuten; 0 = uitgeschakeld. */
+  rescanInterval: number;
 }

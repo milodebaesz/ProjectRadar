@@ -4,10 +4,12 @@ const SETTINGS_KEY = "projectradar.settings";
 const META_KEY = "projectradar.meta";
 const IGNORED_KEY = "projectradar.ignored";
 const THEME_KEY = "projectradar.theme";
+const PANELS_KEY = "projectradar.panels";
 
 const DEFAULT_SETTINGS: Settings = {
   roots: [],
   machineLabel: "",
+  rescanInterval: 0,
 };
 
 export function loadSettings(): Settings {
@@ -22,6 +24,27 @@ export function loadSettings(): Settings {
 
 export function saveSettings(s: Settings): void {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+}
+
+/**
+ * Eenmalige migratie: haal een eventueel oud (plaintext) GitHub-token uit de
+ * settings in localStorage, verwijder het daar, en geef het terug zodat het naar
+ * de OS-keychain verplaatst kan worden. Null als er niets te migreren is.
+ */
+export function takeLegacyGithubToken(): string | null {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if (!raw) return null;
+    const obj = JSON.parse(raw);
+    const tok = typeof obj.githubToken === "string" ? obj.githubToken.trim() : "";
+    if ("githubToken" in obj) {
+      delete obj.githubToken;
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(obj));
+    }
+    return tok ? tok : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Alle handmatige projectvelden, gekeyed op projectKey. */
@@ -58,6 +81,26 @@ export function addIgnored(path: string): void {
   const set = new Set(loadIgnored());
   set.add(path);
   localStorage.setItem(IGNORED_KEY, JSON.stringify([...set]));
+}
+
+/** In-/uitgeklapte staat van detail-panelen, gekeyed op `${projectKey}:${panelId}`. */
+function loadAllPanelState(): Record<string, boolean> {
+  try {
+    return JSON.parse(localStorage.getItem(PANELS_KEY) ?? "{}");
+  } catch {
+    return {};
+  }
+}
+
+export function loadPanelCollapsed(id: string, fallback: boolean): boolean {
+  const all = loadAllPanelState();
+  return id in all ? all[id] : fallback;
+}
+
+export function savePanelCollapsed(id: string, collapsed: boolean): void {
+  const all = loadAllPanelState();
+  all[id] = collapsed;
+  localStorage.setItem(PANELS_KEY, JSON.stringify(all));
 }
 
 export function loadTheme(): "light" | "dark" {
