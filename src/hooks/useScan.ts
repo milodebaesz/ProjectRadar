@@ -11,6 +11,7 @@ import {
 import { buildProjects } from "../lib/model";
 import { isLoggedIn } from "../lib/pocketbase";
 import { syncScan } from "../lib/sync";
+import { flushProjectMeta } from "../lib/cloudSave";
 
 /**
  * Owns het scannen en (indien ingelogd) de cloud-sync: root-instellingen, de
@@ -67,6 +68,10 @@ export function useScan(tauri: boolean, showToast: (msg: string) => void) {
 
       if (isLoggedIn() && info) {
         try {
+          // Eerst uitgestelde writes wegschrijven: `syncScan` haalt daarna het
+          // gecombineerde overzicht op, en zonder deze flush zou dat de versie
+          // van vóór de laatste bewerking terugzetten.
+          await flushProjectMeta();
           setProjects(await syncScan(repos, info, s.machineLabel));
           setSyncError(null);
         } catch (e) {

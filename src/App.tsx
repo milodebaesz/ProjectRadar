@@ -24,7 +24,8 @@ import { deleteGithubRepo } from "./lib/github";
 import type { DeleteOptions } from "./components/DeleteDialog";
 import { saveMeta, takeLegacyGithubToken } from "./lib/storage";
 import { pbEnabled, isLoggedIn, login as pbLogin, logout as pbLogout } from "./lib/pocketbase";
-import { saveProjectMeta, deleteProjectFromCloud } from "./lib/sync";
+import { deleteProjectFromCloud } from "./lib/sync";
+import { queueProjectMeta, flushProjectMeta, setCloudSaveErrorHandler } from "./lib/cloudSave";
 import { useTheme } from "./hooks/useTheme";
 import { useAuth } from "./hooks/useAuth";
 import { useScan } from "./hooks/useScan";
@@ -49,6 +50,16 @@ export default function App() {
     setToast(msg);
     window.setTimeout(() => setToast(null), 2800);
   }
+
+  // Uitgestelde cloud-writes melden hun fouten via de gewone toast, en moeten
+  // alsnog weg zodra het venster sluit — anders gaat de laatste bewerking
+  // verloren in het gat tussen de laatste toetsaanslag en de debounce.
+  useEffect(() => {
+    setCloudSaveErrorHandler((e) => showToast(`Opslaan in cloud mislukt: ${e}`));
+    const onHide = () => void flushProjectMeta();
+    window.addEventListener("pagehide", onHide);
+    return () => window.removeEventListener("pagehide", onHide);
+  }, []);
 
   // GitHub-token: migreer een eventueel oud plaintext-token naar de OS-keychain
   // en bepaal of er een token beschikbaar is voor de verwijder-actie.
@@ -96,11 +107,9 @@ export default function App() {
   const machineName = settings.machineLabel || machine?.hostname || "Deze PC";
 
   function handleSaveMeta(meta: ProjectMeta) {
-    saveMeta(meta); // lokale cache
+    saveMeta(meta); // lokale cache: meteen, dat is goedkoop
     setProjects((prev) => prev.map((p) => (p.key === meta.key ? { ...p, meta } : p)));
-    if (isLoggedIn()) {
-      saveProjectMeta(meta).catch((e) => showToast(`Opslaan in cloud mislukt: ${e}`));
-    }
+    queueProjectMeta(meta); // cloud: uitgesteld, zie cloudSave.ts
   }
 
   function handleToggleMilestone(p: Project, phaseId: string, msId: string, done: boolean) {
@@ -119,9 +128,7 @@ export default function App() {
       if (rank === undefined || p.meta.rank === rank) return p;
       const meta = { ...p.meta, key: p.key, rank };
       saveMeta(meta);
-      if (isLoggedIn()) {
-        saveProjectMeta(meta).catch((e) => showToast(`Volgorde opslaan in cloud mislukt: ${e}`));
-      }
+      queueProjectMeta(meta);
       return { ...p, meta };
     });
     setProjects(updated);
@@ -255,8 +262,14 @@ export default function App() {
     return Math.max(set.size, 1);
   }, [projects]);
 
-  function nav(v: View) {
+  /** Detail verlaten: pending cloud-write niet laten wachten op de debounce. */
+  function closeProject() {
+    void flushProjectMeta();
     setSelectedKey(null);
+  }
+
+  function nav(v: View) {
+    closeProject();
     setView(v);
   }
 
@@ -287,7 +300,7 @@ export default function App() {
           project={selected}
           claudeState={claudeByKey[selected.key] ?? null}
           hasGithubToken={hasGithubToken}
-          onBack={() => setSelectedKey(null)}
+          onBack={closeProject}
           onSave={handleSaveMeta}
           onOpenPath={openPath}
           onLaunch={handleLaunch}
