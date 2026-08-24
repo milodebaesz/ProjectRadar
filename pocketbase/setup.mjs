@@ -37,9 +37,24 @@ function id(name) {
 }
 
 async function ensure(def) {
-  if (byName.has(def.name)) {
-    console.log("• bestaat al:", def.name);
-    return byName.get(def.name);
+  const found = byName.get(def.name);
+  if (found) {
+    // Bestaat al: alleen ontbrekende velden aanvullen. Zonder deze stap sloeg
+    // een bestaande installatie de collectie volledig over, en kwamen later
+    // toegevoegde velden er nooit in — waarna de app ze bij elke sync
+    // stilzwijgend kwijtraakte. Bestaande velden en data blijven ongemoeid.
+    const have = new Set((found.fields ?? []).map((f) => f.name));
+    const missing = (def.fields ?? []).filter((f) => !have.has(f.name));
+    if (!missing.length) {
+      console.log("• bestaat al:", def.name);
+      return found;
+    }
+    const updated = await pb.collections.update(found.id, {
+      fields: [...found.fields, ...missing],
+    });
+    byName.set(updated.name, updated);
+    console.log(`✓ ${def.name}: veld(en) toegevoegd — ${missing.map((f) => f.name).join(", ")}`);
+    return updated;
   }
   const created = await pb.collections.create(def);
   byName.set(created.name, created);
@@ -100,6 +115,14 @@ await ensure({
     { name: "roadmap", type: "json", maxSize: 200000 },
     // Handmatige volgorde in het dashboard; -1 = nooit gesleept.
     { name: "rank", type: "number" },
+    // Horen bij het project en niet bij de machine, dus synchroniseren mee.
+    // Stonden eerder alleen in localStorage, waardoor ze met sync aan bij
+    // elke scan uit beeld verdwenen.
+    { name: "run_command", type: "text" },
+    { name: "dev_url", type: "text" },
+    { name: "claude_instructions", type: "text", max: 8000 },
+    { name: "design_instructions", type: "text", max: 8000 },
+    { name: "history", type: "json", maxSize: 60000 },
     { name: "updated", type: "autodate", onCreate: true, onUpdate: true },
   ],
   indexes: ["CREATE UNIQUE INDEX idx_project_key ON projects (user, key)"],

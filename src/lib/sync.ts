@@ -1,7 +1,8 @@
 import { pb } from "./pocketbase";
-import type { MachineInfo, PcState, Project, ProjectMeta, RepoInfo, Status } from "../types";
+import type { HistoryEntry, MachineInfo, PcState, Project, ProjectMeta, RepoInfo, Status } from "../types";
 import { projectKey } from "./format";
 import { normalizeRoadmap } from "./model";
+import { loadAllMeta } from "./storage";
 
 // Push (lokale scan → cloud) en pull (cloud → overzicht) tegen PocketBase.
 // De roadmap en handmatige velden leven als velden op het `projects`-record;
@@ -11,6 +12,20 @@ function userId(): string {
   const id = pb.authStore.record?.id;
   if (!id) throw new Error("Niet ingelogd");
   return id;
+}
+
+/**
+ * Kies tussen de cloud-waarde en de lokale cache voor één veld.
+ *
+ * Alleen terugvallen op de cache als de sleutel écht ontbreekt in het record.
+ * PocketBase geeft precies de velden terug die in het schema staan, dus
+ * `undefined` betekent hier "deze PocketBase draait nog een oudere
+ * `setup.mjs`" — en dan is de cache het enige dat de waarde nog heeft.
+ * Een veld dat wél bestaat maar leeg is, is een bewuste wis op een andere
+ * PC en wint dus gewoon; anders zou een gewist veld telkens terugkomen.
+ */
+function pick<T>(cloud: T | undefined, cached: T | undefined): T | undefined {
+  return cloud === undefined ? cached : cloud;
 }
 
 async function upsertMachine(info: MachineInfo, label: string): Promise<string> {
@@ -52,6 +67,14 @@ async function upsertProject(repo: RepoInfo, key: string): Promise<string> {
       }
       if (file.links?.repo && !existing.repo_url) patch.repo_url = file.links.repo;
       if (file.links?.deploy && !existing.deploy_url) patch.deploy_url = file.links.deploy;
+      if (file.runCommand && !existing.run_command) patch.run_command = file.runCommand;
+      if (file.devUrl && !existing.dev_url) patch.dev_url = file.devUrl;
+      if (file.claudeInstructions && !existing.claude_instructions) {
+        patch.claude_instructions = file.claudeInstructions;
+      }
+      if (file.designInstructions && !existing.design_instructions) {
+        patch.design_instructions = file.designInstructions;
+      }
     }
     // Stack: bestand heeft voorrang, anders gedetecteerd — alleen als nog leeg.
     const curStack = Array.isArray(existing.stack) ? existing.stack : [];
@@ -74,6 +97,11 @@ async function upsertProject(repo: RepoInfo, key: string): Promise<string> {
       repo_url: file?.links?.repo ?? "",
       deploy_url: file?.links?.deploy ?? "",
       remote_url: repo.remote_url ?? "",
+      run_command: file?.runCommand ?? "",
+      dev_url: file?.devUrl ?? "",
+      claude_instructions: file?.claudeInstructions ?? "",
+      design_instructions: file?.designInstructions ?? "",
+      history: [],
     })
   ).id;
 }
@@ -168,8 +196,13 @@ export async function fetchProjects(thisHostname: string): Promise<Project[]> {
     byProject.set(s.project, arr);
   }
 
+  // Lokale cache als vangnet voor velden die deze PocketBase (nog) niet kent.
+  const cachedAll = loadAllMeta();
+
   return projects.map((p) => {
     const stack: string[] = Array.isArray(p.stack) ? p.stack : [];
+    const cached = cachedAll[p.key] ?? ({ key: p.key } as ProjectMeta);
+    const history = pick<unknown>(p.history, cached.history);
     const meta: ProjectMeta = {
       key: p.key,
       description: p.description || undefined,
@@ -178,6 +211,11 @@ export async function fetchProjects(thisHostname: string): Promise<Project[]> {
       links: { repo: p.repo_url || undefined, deploy: p.deploy_url || undefined },
       roadmap: Array.isArray(p.roadmap) ? normalizeRoadmap(p.roadmap) : [],
       rank: typeof p.rank === "number" && p.rank >= 0 ? p.rank : undefined,
+      runCommand: pick(p.run_command, cached.runCommand) || undefined,
+      devUrl: pick(p.dev_url, cached.devUrl) || undefined,
+      claudeInstructions: pick(p.claude_instructions, cached.claudeInstructions) || undefined,
+      designInstructions: pick(p.design_instructions, cached.designInstructions) || undefined,
+      history: Array.isArray(history) ? (history as HistoryEntry[]) : undefined,
     };
     return {
       key: p.key,
@@ -221,5 +259,13 @@ export async function saveProjectMeta(meta: ProjectMeta) {
     roadmap: meta.roadmap ?? [],
     // -1 = "nooit gesleept"; PocketBase kent geen null voor number-velden.
     rank: meta.rank ?? -1,
+    // Deze vier + history leefden eerder alleen lokaal, waardoor ze bij elke
+    // scan met sync aan uit beeld verdwenen (de cloud-versie verving de
+    // lokale). Ze horen bij het project, niet bij de machine, dus horen ze mee.
+    run_command: meta.runCommand ?? "",
+    dev_url: meta.devUrl ?? "",
+    claude_instructions: meta.claudeInstructions ?? "",
+    design_instructions: meta.designInstructions ?? "",
+    history: meta.history ?? [],
   });
 }

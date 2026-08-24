@@ -19,6 +19,10 @@ function normalizePhase(ph: Record<string, unknown>): Phase {
     name: String(ph.name ?? ph.title ?? "Fase"),
     target: ph.target != null ? String(ph.target) : undefined,
     onHold: !!(ph.onHold ?? ph.on_hold),
+    // Moet mee: de cloud-roadmap gaat bij elke pull door deze functie heen, en
+    // een fase die hier zijn scheduledAt verliest komt zonder planning terug —
+    // waarna de geplande sprint-start stilletjes nooit meer afvuurt.
+    scheduledAt: ph.scheduledAt != null ? String(ph.scheduledAt) : undefined,
     milestones: ms.map((m) => normalizeMilestone(m as Record<string, unknown>)),
   };
 }
@@ -182,6 +186,9 @@ function mergeMeta(key: string, cached: ProjectMeta, file: RepoInfo["radar_meta"
   if (file.devUrl != null && !merged.devUrl) merged.devUrl = file.devUrl;
   if (file.claudeInstructions != null && !merged.claudeInstructions) {
     merged.claudeInstructions = file.claudeInstructions;
+  }
+  if (file.designInstructions != null && !merged.designInstructions) {
+    merged.designInstructions = file.designInstructions;
   }
   // Links per sub-veld seeden, zodat een handmatig ingevulde repo- of deploy-URL
   // blijft staan terwijl de andere nog uit het bestand kan komen.

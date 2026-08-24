@@ -13,6 +13,7 @@ import {
   byRank,
   reorderProjects,
   dedupeRoadmap,
+  normalizeRoadmap,
 } from "./model";
 
 /** Minimale RepoInfo-fixture; overschrijf alleen wat de test nodig heeft. */
@@ -178,6 +179,37 @@ describe("roadmapProgress / effectiveStack", () => {
       "mac",
     )[0];
     expect(effectiveStack(p)).toEqual(["Rust"]);
+  });
+});
+
+describe("normalizeRoadmap", () => {
+  it("behoudt scheduledAt (regressie: geplande sprints verdwenen via de cloud)", () => {
+    // Elke roadmap die uit PocketBase komt gaat hier doorheen. Liet deze
+    // functie scheduledAt vallen, dan kwam een ingeplande fase zonder planning
+    // terug en vuurde de geplande sprint-start nooit meer af — zonder melding.
+    const [phase] = normalizeRoadmap([
+      {
+        id: "f1",
+        name: "Sprint 5",
+        scheduledAt: "2026-09-01T09:00:00.000Z",
+        milestones: [{ id: "a", text: "x", done: false }],
+      },
+    ]);
+    expect(phase.scheduledAt).toBe("2026-09-01T09:00:00.000Z");
+  });
+
+  it("laat scheduledAt weg als de fase er geen heeft", () => {
+    const [phase] = normalizeRoadmap([{ id: "f1", name: "Sprint 5", milestones: [] }]);
+    expect(phase.scheduledAt).toBeUndefined();
+  });
+
+  it("corrigeert afwijkende veldnamen van Claude naar het schema", () => {
+    const [phase] = normalizeRoadmap([
+      { title: "Fase A", milestones: [{ label: "Doe iets", completed: true }] },
+    ]);
+    expect(phase.name).toBe("Fase A");
+    expect(phase.milestones[0].text).toBe("Doe iets");
+    expect(phase.milestones[0].done).toBe(true);
   });
 });
 
