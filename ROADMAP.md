@@ -106,14 +106,22 @@ centraal samenbrengt, inclusief roadmap-editor en Claude Code-integratie.
 - [x] **Projectdetail-layout:** responsive 1/2/3-koloms grid (i.p.v. vaste
       2 kolommen die uitrekten naar de hoogste buur); alle panelen
       in-/uitklapbaar met compacte samenvatting, onthouden per project
+- [x] **Design-pass:** marineblauw is nu de dragende kleur (navigatiebalk,
+      primaire knop, merk) en de teal uitsluitend signaal — voortgang, in
+      sync, Claude actief. Alle zachte vlakken/randen komen uit tokens per
+      thema; er staat geen losse `rgba()` meer in een regel, waardoor de
+      lichte modus niet langer tinten uit de donkere modus gebruikte.
+- [x] **Toegankelijkheid:** één `:focus-visible`-ring voor de hele app (de
+      formuliervelden hadden `outline:none` zonder vervanging, het zoekveld
+      had helemaal geen focusindicator); projectkaart, terminal-tabs en
+      link-pills zijn echte knoppen en dus met het toetsenbord te bedienen;
+      `prefers-reduced-motion` zet de decoratieve animaties uit.
 
 **Open:**
 - [ ] **Auto-rescan:** herscant op instelbaar interval (bijv. 5 min) via een
       instelling in de UI — zodat de git-stand vanzelf bijblijft
 - [ ] **"Drifting" badge:** als status "actief" is maar >14 dagen geen commit
       binnenkwam, toon een automatische waarschuwingsbadge op de kaart
-- [ ] **Design-pass:** marineblauw kleurenpalet consequent doorvoeren (conform PRD §7);
-      status-badges met icoon + kleur; monospace voor commit-hashes/branches
 
 ---
 

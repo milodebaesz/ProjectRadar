@@ -78,7 +78,7 @@ export default function Sidebar({
       <div className="pc-card">
         <div className="row">
           <span className={`dot${scanning ? " busy" : ""}`} />
-          <b style={{ color: "var(--txt)" }}>Deze PC · {name}</b>
+          <b>Deze PC · {name}</b>
         </div>
         <div className="row" style={{ marginTop: 9 }}>
           {scanning ? "Bezig met scannen…" : `Laatste scan · ${relativeTime(lastScan)}`}
@@ -86,7 +86,7 @@ export default function Sidebar({
         <div className="row">
           {repoCount} repo&apos;s · {noGitCount} zonder git
         </div>
-        <div className="row" style={{ marginTop: 9, color: synced ? "var(--ahead)" : "var(--txt-faint)" }}>
+        <div className={`row ${synced ? "ok" : "muted"}`} style={{ marginTop: 9 }}>
           {synced ? "☁ Gesynct" : "○ Alleen lokaal"}
         </div>
         {syncError && (
