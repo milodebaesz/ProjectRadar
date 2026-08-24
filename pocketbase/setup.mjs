@@ -98,6 +98,8 @@ await ensure({
     { name: "deploy_url", type: "text" },
     { name: "remote_url", type: "text" },
     { name: "roadmap", type: "json", maxSize: 200000 },
+    // Handmatige volgorde in het dashboard; -1 = nooit gesleept.
+    { name: "rank", type: "number" },
     { name: "updated", type: "autodate", onCreate: true, onUpdate: true },
   ],
   indexes: ["CREATE UNIQUE INDEX idx_project_key ON projects (user, key)"],
@@ -123,6 +125,7 @@ await ensure({
     { name: "last_commit_hash", type: "text" },
     { name: "last_commit_date", type: "date" },
     { name: "total_commits", type: "number" },
+    { name: "weekly_commits", type: "number" },
     { name: "has_uncommitted", type: "bool" },
     { name: "ahead", type: "number" },
     { name: "behind", type: "number" },
