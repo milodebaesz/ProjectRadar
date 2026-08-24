@@ -1,0 +1,579 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Projectradar · Extern</title>
+<style>
+  :root {
+    --bg: #0b1220;
+    --bg-2: #121b2e;
+    --bg-3: #1a2540;
+    --line: #26314d;
+    --txt: #e7ecf7;
+    --txt-dim: #aeb9d4;
+    --txt-faint: #7c88a8;
+    --accent: #2dd4bf;
+    --accent-2: #14b8a6;
+    --warn: #f5a524;
+    --danger: #f0576a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--txt);
+    font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  header { padding: 18px 16px 10px; position: sticky; top: 0; background: var(--bg); z-index: 5; }
+  .header-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  header h1 { font-size: 18px; margin: 0 0 2px; }
+  header .sub { font-size: 12.5px; color: var(--txt-faint); }
+  .gear { background: none; border: none; color: var(--txt-faint); font-size: 17px; padding: 2px 4px; }
+  main { padding: 4px 12px 40px; }
+  .gate { padding: 28px 20px 40px; }
+  .gate h1 { text-align: center; }
+  .gate p { color: var(--txt-dim); font-size: 13.5px; }
+  .gate-sec { margin-top: 20px; border: 1px solid var(--line); border-radius: 12px; padding: 14px; background: var(--bg-2); }
+  .gate-sec h3 { font-size: 13.5px; margin: 0 0 3px; }
+  .gate-sec p { font-size: 12px; color: var(--txt-faint); margin: 0 0 11px; }
+  .gate-sec input + input { margin-top: 8px; }
+  input[type="text"], input[type="password"], input[type="email"], input[type="url"] {
+    width: 100%; background: var(--bg-3); border: 1px solid var(--line); border-radius: 10px;
+    padding: 12px 14px; color: var(--txt); font-size: 15px; outline: none;
+  }
+  button {
+    border: none; border-radius: 10px; padding: 10px 14px; font-size: 14px; font-weight: 600;
+    cursor: pointer; -webkit-tap-highlight-color: transparent;
+  }
+  .btn-pri { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #04201c; margin-top: 16px; width: 100%; }
+  .card { background: var(--bg-2); border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin-bottom: 12px; }
+  .card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .card-head h2 { font-size: 15.5px; margin: 0; }
+  .badge { font-size: 11px; padding: 3px 9px; border-radius: 99px; border: 1px solid var(--line); color: var(--txt-dim); white-space: nowrap; }
+  .badge.busy { color: var(--accent); border-color: rgba(45,212,191,.4); background: rgba(45,212,191,.12); }
+  .badge.idle { color: var(--txt-faint); }
+  .mode {
+    font-size: 11.5px; padding: 7px 11px; border-radius: 9px; margin: 0 12px 10px;
+    border: 1px solid var(--line); background: var(--bg-2); color: var(--txt-dim);
+  }
+  .mode.cloud { color: var(--warn); border-color: rgba(245,165,36,.32); background: rgba(245,165,36,.1); }
+  .meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+  .chip {
+    font-size: 11px; padding: 3px 8px; border-radius: 7px; white-space: nowrap;
+    background: var(--bg-3); border: 1px solid var(--line); color: var(--txt-dim);
+  }
+  .chip.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .chip.dirty { color: var(--warn); border-color: rgba(245,165,36,.38); background: rgba(245,165,36,.12); }
+  .chip.sync { color: var(--accent); border-color: rgba(45,212,191,.38); background: rgba(45,212,191,.1); }
+  .chip.st-actief { color: var(--accent); border-color: rgba(45,212,191,.38); }
+  .chip.st-onhold { color: var(--warn); }
+  .chip.st-afgerond { color: var(--txt-faint); }
+  .commit { font-size: 11.5px; color: var(--txt-faint); margin-top: 7px; }
+  .commit .hash { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .diverged {
+    margin-top: 9px; font-size: 11.5px; color: var(--warn); padding: 6px 9px; border-radius: 8px;
+    background: rgba(245,165,36,.1); border: 1px solid rgba(245,165,36,.3);
+  }
+  .bar { height: 5px; border-radius: 99px; background: var(--bg-3); overflow: hidden; margin: 10px 0 4px; }
+  .bar .fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
+  .progress-lbl { font-size: 11.5px; color: var(--txt-faint); }
+  .phase { border: 1px solid var(--line); border-radius: 10px; padding: 10px; margin-top: 10px; background: var(--bg-3); }
+  .phase.on-hold { opacity: .55; }
+  .phase-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+  .phase-head .name { font-weight: 600; font-size: 13.5px; }
+  .phase-head .count { font-size: 11.5px; color: var(--txt-faint); }
+  .ms { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 13.5px; }
+  .ms.done { color: var(--txt-faint); text-decoration: line-through; }
+  .ms input[type="checkbox"] { width: 18px; height: 18px; flex-shrink: 0; accent-color: var(--accent); }
+  .ms input[type="checkbox"]:disabled { opacity: .4; }
+  .ms .txt { flex: 1; }
+  .ms button { flex-shrink: 0; font-size: 11px; padding: 5px 9px; background: var(--bg); color: var(--accent); border: 1px solid var(--line); }
+  .run-phase { margin-top: 8px; width: 100%; background: var(--bg); color: var(--accent); border: 1px solid var(--line); }
+  .empty { color: var(--txt-faint); font-size: 13px; text-align: center; padding: 30px 10px; }
+  .err { color: var(--danger); font-size: 13px; text-align: center; padding: 14px; }
+</style>
+</head>
+<body>
+
+<div id="gate" class="gate" style="display:none">
+  <h1>Projectradar</h1>
+
+  <div class="gate-sec">
+    <h3>Mac — direct bedienen</h3>
+    <p>Voor live status en het starten van Claude. Token staat in ProjectRadar → Instellingen → Extern bereik.</p>
+    <input id="in-mac" type="url" placeholder="https://macbook.tailnet.ts.net" autocapitalize="off" autocorrect="off" />
+    <input id="in-token" type="password" placeholder="Token" autocapitalize="off" autocorrect="off" />
+  </div>
+
+  <div class="gate-sec">
+    <h3>Cloud — terugval</h3>
+    <p>Optioneel. Toont je projecten ook als de Mac uit staat. Alleen lezen.</p>
+    <input id="in-pb" type="url" placeholder="https://pb.jouwdomein.nl" autocapitalize="off" autocorrect="off" />
+    <input id="in-email" type="email" placeholder="E-mail" autocapitalize="off" autocorrect="off" />
+    <input id="in-pw" type="password" placeholder="Wachtwoord" />
+  </div>
+
+  <button class="btn-pri" onclick="saveConfig()">Opslaan</button>
+  <p id="gate-err" class="err"></p>
+</div>
+
+<div id="app" style="display:none">
+  <header>
+    <div class="header-top">
+      <h1>Projectradar</h1>
+      <button class="gear" onclick="openGate()" aria-label="Instellingen">⚙</button>
+    </div>
+    <div class="sub" id="updated">—</div>
+  </header>
+  <div id="mode-banner"></div>
+  <main id="list"></main>
+</div>
+
+<script>
+// ── Configuratie ────────────────────────────────────────────────────────────
+// De pagina kent twee bronnen: de Mac zelf (vers, en de enige die acties kan
+// uitvoeren) en PocketBase (ouder, maar bereikbaar als de Mac uit staat).
+// Wordt de pagina rechtstreeks door de Mac geserveerd, dan is de eigen origin
+// het adres van de brug en hoeft daar niets voor ingevuld te worden.
+
+const K = { token: "pr_remote_token", mac: "pr_mac_url", pb: "pr_pb_url", pbTok: "pr_pb_token" };
+const SERVED_BY_MAC = location.port === "4174";
+
+const cfg = {
+  token: localStorage.getItem(K.token) || "",
+  mac: localStorage.getItem(K.mac) || "",
+  pb: localStorage.getItem(K.pb) || "",
+  pbTok: localStorage.getItem(K.pbTok) || "",
+};
+
+let MODE = "none";           // "live" | "cloud" | "none"
+let lastCloud = null;
+let lastCloudAt = 0;
+const CLOUD_TTL = 30000;     // cloud hoeft niet elke tick opnieuw opgehaald
+
+const trimSlash = (s) => (s || "").replace(/\/+$/, "");
+const macBase = () => (SERVED_BY_MAC ? "" : trimSlash(cfg.mac));
+const pbBase = () => trimSlash(cfg.pb);
+
+// ── Gate ────────────────────────────────────────────────────────────────────
+
+function openGate(msg) {
+  document.getElementById("gate").style.display = "block";
+  document.getElementById("app").style.display = "none";
+  document.getElementById("gate-err").textContent = msg || "";
+  document.getElementById("in-mac").value = cfg.mac;
+  document.getElementById("in-token").value = cfg.token;
+  document.getElementById("in-pb").value = cfg.pb;
+  // Rechtstreeks door de Mac geserveerd: adres is dan de eigen origin.
+  if (SERVED_BY_MAC) document.getElementById("in-mac").parentElement.style.display = "none";
+}
+
+async function saveConfig() {
+  const err = document.getElementById("gate-err");
+  err.textContent = "";
+
+  cfg.mac = trimSlash(document.getElementById("in-mac").value.trim());
+  cfg.token = document.getElementById("in-token").value.trim();
+  cfg.pb = trimSlash(document.getElementById("in-pb").value.trim());
+  localStorage.setItem(K.mac, cfg.mac);
+  localStorage.setItem(K.token, cfg.token);
+  localStorage.setItem(K.pb, cfg.pb);
+
+  const email = document.getElementById("in-email").value.trim();
+  const pw = document.getElementById("in-pw").value;
+  if (cfg.pb && email && pw) {
+    try {
+      await pbLogin(email, pw);
+    } catch (e) {
+      err.textContent = "Cloud-login mislukt: " + e.message;
+      return;
+    }
+  }
+  if (!cfg.token && !cfg.pbTok) {
+    err.textContent = "Vul minstens één van beide in.";
+    return;
+  }
+  document.getElementById("in-pw").value = "";
+  boot();
+}
+
+// ── Bron 1: de Mac (live) ───────────────────────────────────────────────────
+
+async function fetchLive() {
+  if (!cfg.token) return null;
+  if (!SERVED_BY_MAC && !cfg.mac) return null;
+
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 2500);
+  try {
+    const res = await fetch(macBase() + "/api/state", {
+      headers: { Authorization: "Bearer " + cfg.token },
+      signal: ctrl.signal,
+    });
+    if (res.status === 401) throw new Error("unauthorized");
+    // 503 = app draait maar heeft nog geen scan gedaan; geen reden om
+    // naar de cloud terug te vallen, de Mac is immers bereikbaar.
+    if (res.status === 503) return { updatedAt: new Date().toISOString(), projects: [] };
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (e) {
+    if (e.message === "unauthorized") throw e;
+    return null; // onbereikbaar, timeout, of netwerkfout
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function action(type, payload) {
+  if (MODE !== "live") return;
+  fetch(macBase() + "/api/action", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + cfg.token },
+    body: JSON.stringify({ type, payload }),
+  }).catch(() => {});
+}
+
+// ── Bron 2: PocketBase (terugval) ───────────────────────────────────────────
+
+async function pbLogin(identity, password) {
+  const res = await fetch(pbBase() + "/api/collections/users/auth-with-password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ identity, password }),
+  });
+  if (!res.ok) throw new Error("controleer e-mail en wachtwoord");
+  const json = await res.json();
+  cfg.pbTok = json.token;
+  localStorage.setItem(K.pbTok, json.token);
+}
+
+async function pbGet(path) {
+  const res = await fetch(pbBase() + path, { headers: { Authorization: cfg.pbTok } });
+  if (res.status === 401 || res.status === 403) throw new Error("pb-unauthorized");
+  if (!res.ok) throw new Error("pb http " + res.status);
+  return res.json();
+}
+
+/**
+ * Bouwt dezelfde structuur als `buildRemoteSnapshot` (src/lib/model.ts), maar
+ * uit de cloud-records — zo hoeft `render` niet te weten waar de data vandaan
+ * komt. Spiegelt de mapping van `fetchProjects` in src/lib/sync.ts.
+ */
+async function fetchCloud() {
+  const [projects, states] = await Promise.all([
+    pbGet("/api/collections/projects/records?perPage=500"),
+    pbGet("/api/collections/project_states/records?perPage=500&expand=machine"),
+  ]);
+
+  const byProject = new Map();
+  for (const s of states.items) {
+    const m = s.expand && s.expand.machine;
+    const arr = byProject.get(s.project) || [];
+    arr.push({
+      machine: (m && (m.label || m.hostname)) || "PC",
+      branch: s.branch || null,
+      detached: !!s.detached,
+      lastCommitDate: s.last_commit_date || null,
+      lastCommitHash: s.last_commit_hash || null,
+      weeklyCommits: s.weekly_commits || 0,
+      hasUncommitted: !!s.has_uncommitted,
+      ahead: s.ahead || 0,
+      behind: s.behind || 0,
+      updated: s.updated || null,
+    });
+    byProject.set(s.project, arr);
+  }
+
+  let newest = 0;
+  const out = projects.items.map((p) => {
+    const sts = byProject.get(p.id) || [];
+    for (const s of sts) {
+      const t = s.updated ? new Date(s.updated).getTime() : 0;
+      if (t > newest) newest = t;
+    }
+    // Nieuwste commit wint; welke machine "deze PC" is, weten we hier niet.
+    const st = sts.slice().sort((a, b) => {
+      const ta = a.lastCommitDate ? new Date(a.lastCommitDate).getTime() : 0;
+      const tb = b.lastCommitDate ? new Date(b.lastCommitDate).getTime() : 0;
+      return tb - ta;
+    })[0] || null;
+
+    const roadmap = Array.isArray(p.roadmap) ? p.roadmap : [];
+    let done = 0;
+    let total = 0;
+    for (const ph of roadmap) {
+      for (const m of ph.milestones || []) {
+        total++;
+        if (m.done) done++;
+      }
+    }
+
+    return {
+      key: p.key,
+      name: p.name,
+      status: p.status || "idee",
+      claude: null,          // Claude-status leeft alleen op de Mac
+      canLaunch: false,      // zonder Mac valt er niets te starten
+      progress: total ? { done, total, pct: Math.round((done / total) * 100) } : null,
+      git: st
+        ? {
+            machine: st.machine,
+            isThisPc: false,
+            branch: st.branch,
+            detached: st.detached,
+            hasUncommitted: st.hasUncommitted,
+            ahead: st.ahead,
+            behind: st.behind,
+            lastCommitDate: st.lastCommitDate,
+            lastCommitHash: st.lastCommitHash ? st.lastCommitHash.slice(0, 7) : null,
+            weeklyCommits: st.weeklyCommits,
+          }
+        : null,
+      sync: divergence(sts),
+      phases: roadmap.map((ph) => ({
+        id: ph.id,
+        name: ph.name,
+        onHold: !!ph.onHold,
+        milestones: (ph.milestones || []).map((m) => ({ id: m.id, text: m.text, done: !!m.done })),
+      })),
+      history: [],
+    };
+  });
+
+  return { updatedAt: newest ? new Date(newest).toISOString() : null, projects: out };
+}
+
+/** Spiegelt `compareStates` uit src/lib/model.ts. */
+function divergence(sts) {
+  if (sts.length < 2) return null;
+  const hashes = new Set(sts.map((s) => s.lastCommitHash || "?"));
+  if (hashes.size === 1) return null;
+  const sorted = sts.slice().sort((a, b) => {
+    const ta = a.lastCommitDate ? new Date(a.lastCommitDate).getTime() : 0;
+    const tb = b.lastCommitDate ? new Date(b.lastCommitDate).getTime() : 0;
+    return tb - ta;
+  });
+  const lead = sorted[0].machine;
+  const others = sorted.slice(1).map((s) => s.machine).join(", ");
+  return { message: others + " loopt achter op " + lead, leadMachine: lead };
+}
+
+// ── Weergave ────────────────────────────────────────────────────────────────
+
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+const STATUS_LABEL = { idee: "Idee", actief: "Actief", onhold: "On hold", afgerond: "Afgerond" };
+
+// Spiegelt `relativeTime` uit src/lib/format.ts. Bewust herhaald: deze pagina
+// is standalone (geen bundler, geen imports) en wordt als los bestand
+// geserveerd — door de Rust-server én vanaf de reverse proxy.
+function relTime(iso) {
+  if (!iso) return "—";
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return "—";
+  const sec = Math.round((Date.now() - t) / 1000);
+  const min = Math.round(sec / 60);
+  const hr = Math.round(min / 60);
+  const day = Math.round(hr / 24);
+  if (sec < 45) return "zojuist";
+  if (min < 45) return min + " min geleden";
+  if (hr < 24) return hr + "u geleden";
+  if (day === 1) return "gisteren";
+  if (day < 7) return day + " dgn geleden";
+  const wk = Math.round(day / 7);
+  if (wk < 5) return wk + (wk === 1 ? " week" : " wkn") + " geleden";
+  const mo = Math.round(day / 30);
+  if (mo < 12) return mo + (mo === 1 ? " maand" : " mnd") + " geleden";
+  return Math.round(day / 365) + " jaar geleden";
+}
+
+/** Chips met projectstatus en git-stand; het antwoord op "staat er nog werk open?". */
+function metaRow(p) {
+  const chips = [];
+  if (p.status) {
+    chips.push(`<span class="chip st-${esc(p.status)}">${esc(STATUS_LABEL[p.status] || p.status)}</span>`);
+  }
+  const g = p.git;
+  if (g) {
+    if (g.detached) chips.push('<span class="chip mono">detached HEAD</span>');
+    else if (g.branch) chips.push(`<span class="chip mono">${esc(g.branch)}</span>`);
+    if (g.hasUncommitted) chips.push('<span class="chip dirty">● uncommitted</span>');
+    if (g.ahead > 0) chips.push(`<span class="chip sync">↑${Number(g.ahead)}</span>`);
+    if (g.behind > 0) chips.push(`<span class="chip sync">↓${Number(g.behind)}</span>`);
+    if (g.weeklyCommits > 0) chips.push(`<span class="chip">🔥 ${Number(g.weeklyCommits)} deze week</span>`);
+    // Alleen tonen als het beeld van een ándere machine komt.
+    if (!g.isThisPc && g.machine) chips.push(`<span class="chip">via ${esc(g.machine)}</span>`);
+  }
+  if (!chips.length) return "";
+  return `<div class="meta">${chips.join("")}</div>`;
+}
+
+function commitLine(g) {
+  if (!g || (!g.lastCommitHash && !g.lastCommitDate)) return "";
+  const hash = g.lastCommitHash ? `<span class="hash">${esc(g.lastCommitHash)}</span> · ` : "";
+  return `<div class="commit">${hash}${esc(relTime(g.lastCommitDate))}</div>`;
+}
+
+function renderModeBanner(state) {
+  const el = document.getElementById("mode-banner");
+  if (MODE === "live") {
+    el.innerHTML = "";
+    return;
+  }
+  el.innerHTML = `<div class="mode cloud">
+    Mac niet bereikbaar — cloudgegevens van ${esc(relTime(state.updatedAt))}. Alleen lezen.
+  </div>`;
+}
+
+function render(state) {
+  document.getElementById("gate").style.display = "none";
+  document.getElementById("app").style.display = "block";
+  document.getElementById("updated").textContent = state.updatedAt
+    ? "Bijgewerkt " + relTime(state.updatedAt)
+    : "—";
+  renderModeBanner(state);
+
+  const list = document.getElementById("list");
+  if (!state.projects.length) {
+    list.innerHTML = '<div class="empty">Nog geen projecten gescand.</div>';
+    return;
+  }
+
+  const live = MODE === "live";
+
+  list.innerHTML = state.projects.map((p) => {
+    const claudeBadge = p.claude
+      ? `<span class="badge ${p.claude}">${p.claude === "busy" ? "● Claude bezig" : "○ Claude idle"}</span>`
+      : "";
+    const progress = p.progress
+      ? `<div class="bar"><div class="fill" style="width:${Number(p.progress.pct)}%"></div></div>
+         <div class="progress-lbl">${Number(p.progress.pct)}% · ${Number(p.progress.done)}/${Number(p.progress.total)} mijlpalen</div>`
+      : "";
+
+    const phases = (p.phases || []).map((ph) => {
+      const done = ph.milestones.filter((m) => m.done).length;
+      // Id's komen deels uit Claude-gegenereerde roadmap-JSON en projectsleutels
+      // mogen apostrofs bevatten ("mike's site"). Daarom geen inline handlers
+      // met geïnterpoleerde waarden, maar data-attributen + delegatie.
+      const ref = `data-p="${esc(p.key)}" data-ph="${esc(ph.id)}"`;
+      const ms = ph.milestones.map((m) => `
+        <div class="ms ${m.done ? "done" : ""}">
+          <input type="checkbox" ${m.done ? "checked" : ""} ${live ? "" : "disabled"}
+            data-act="toggle_milestone" ${ref} data-m="${esc(m.id)}" />
+          <span class="txt">${esc(m.text)}</span>
+          ${!m.done && p.canLaunch && live ? `<button data-act="run_milestone" ${ref} data-m="${esc(m.id)}">Claude</button>` : ""}
+        </div>`).join("");
+      return `
+        <div class="phase ${ph.onHold ? "on-hold" : ""}">
+          <div class="phase-head">
+            <span class="name">${esc(ph.name)}</span>
+            <span class="count">${done}/${ph.milestones.length}</span>
+          </div>
+          ${ms}
+          ${p.canLaunch && live && !ph.onHold ? `<button class="run-phase" data-act="run_phase" ${ref}>Sprint oppakken</button>` : ""}
+        </div>`;
+    }).join("");
+
+    const diverged = p.sync && p.sync.message
+      ? `<div class="diverged">⚠︎ ${esc(p.sync.message)}</div>`
+      : "";
+
+    return `
+      <div class="card">
+        <div class="card-head">
+          <h2>${esc(p.name)}</h2>
+          ${claudeBadge}
+        </div>
+        ${metaRow(p)}
+        ${commitLine(p.git)}
+        ${diverged}
+        ${progress}
+        ${phases}
+      </div>`;
+  }).join("");
+}
+
+// ── Lus ─────────────────────────────────────────────────────────────────────
+
+async function tick() {
+  // De Mac heeft altijd voorrang: verser, en de enige bron die acties aankan.
+  let live = null;
+  try {
+    live = await fetchLive();
+  } catch (e) {
+    if (e.message === "unauthorized") {
+      localStorage.removeItem(K.token);
+      cfg.token = "";
+      openGate("Token ongeldig — vraag een nieuwe aan in de app.");
+      return;
+    }
+  }
+  if (live) {
+    MODE = "live";
+    render(live);
+    return;
+  }
+
+  if (!cfg.pb || !cfg.pbTok) {
+    MODE = "none";
+    document.getElementById("app").style.display = "block";
+    document.getElementById("gate").style.display = "none";
+    document.getElementById("mode-banner").innerHTML =
+      '<div class="mode cloud">Mac niet bereikbaar. Stel bij ⚙ een cloud-terugval in om je projecten toch te zien.</div>';
+    document.getElementById("list").innerHTML = "";
+    document.getElementById("updated").textContent = "—";
+    return;
+  }
+
+  try {
+    if (!lastCloud || Date.now() - lastCloudAt > CLOUD_TTL) {
+      lastCloud = await fetchCloud();
+      lastCloudAt = Date.now();
+    }
+    MODE = "cloud";
+    render(lastCloud);
+  } catch (e) {
+    if (e.message === "pb-unauthorized") {
+      localStorage.removeItem(K.pbTok);
+      cfg.pbTok = "";
+      openGate("Cloud-sessie verlopen — log opnieuw in.");
+    }
+  }
+}
+
+// Eén keer opgehangen aan de container, die alle renders overleeft.
+function bindActions() {
+  const list = document.getElementById("list");
+  const refOf = (el) => {
+    const payload = { projectKey: el.dataset.p, phaseId: el.dataset.ph };
+    if (el.dataset.m) payload.milestoneId = el.dataset.m;
+    return payload;
+  };
+  list.addEventListener("change", (e) => {
+    const el = e.target.closest('input[data-act="toggle_milestone"]');
+    if (!el) return;
+    action("toggle_milestone", { ...refOf(el), done: el.checked });
+  });
+  list.addEventListener("click", (e) => {
+    const el = e.target.closest("button[data-act]");
+    if (!el) return;
+    action(el.dataset.act, refOf(el));
+  });
+}
+
+function boot() {
+  if (!cfg.token && !cfg.pbTok) {
+    openGate();
+    return;
+  }
+  tick();
+  setInterval(tick, 4000);
+}
+
+bindActions();
+boot();
+</script>
+</body>
+</html>

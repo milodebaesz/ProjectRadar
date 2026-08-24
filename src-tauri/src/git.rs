@@ -50,6 +50,8 @@ pub struct RepoInfo {
     pub default_run_command: Option<String>,
     /// Auto-gedetecteerde dev-URL (poort + framework); None als geen webapp.
     pub default_dev_url: Option<String>,
+    /// Aantal commits in de afgelopen 7 dagen.
+    pub weekly_commits: u32,
     /// Inhoud van een `.projectradar.json` in de repo-root, indien aanwezig.
     /// Vorm sluit aan op `ProjectMeta` in de frontend.
     pub radar_meta: Option<serde_json::Value>,
@@ -60,6 +62,24 @@ fn read_radar_meta(path: &Path) -> Option<serde_json::Value> {
     let file = path.join(".projectradar.json");
     let raw = std::fs::read_to_string(&file).ok()?;
     serde_json::from_str(&raw).ok()
+}
+
+/// Herlees het `.projectradar.json` van één project, zonder een volledige scan.
+/// Gebruikt door de "Verversen uit bestand"-knop: Claude schrijft het bestand
+/// bij tijdens een sprint, en dit haalt die versie direct op.
+///
+/// Onderscheidt bewust "geen bestand" (`Ok(None)`) van "kapot bestand"
+/// (`Err`) — bij ongeldige JSON moet de gebruiker dat te horen krijgen in
+/// plaats van een stille no-op.
+#[tauri::command]
+pub fn read_radar_file(path: String) -> Result<Option<serde_json::Value>, String> {
+    let file = Path::new(&path).join(".projectradar.json");
+    if !file.exists() {
+        return Ok(None);
+    }
+    let raw = std::fs::read_to_string(&file).map_err(|e| format!("Lezen mislukt: {e}"))?;
+    let value = serde_json::from_str(&raw).map_err(|e| format!("Ongeldige JSON: {e}"))?;
+    Ok(Some(value))
 }
 
 #[derive(Serialize)]
@@ -312,6 +332,10 @@ fn read_repo(path: &Path) -> RepoInfo {
         .and_then(|s| s.parse::<u32>().ok())
         .unwrap_or(0);
 
+    let weekly_commits = git(path, &["rev-list", "--count", "--since=7 days ago", "HEAD"])
+        .and_then(|s| s.parse::<u32>().ok())
+        .unwrap_or(0);
+
     let has_uncommitted = git(path, &["status", "--porcelain"])
         .map(|s| !s.is_empty())
         .unwrap_or(false);
@@ -348,6 +372,7 @@ fn read_repo(path: &Path) -> RepoInfo {
         last_commit_message,
         last_commit_date,
         total_commits,
+        weekly_commits,
         has_uncommitted,
         remote_url,
         has_upstream,
@@ -360,10 +385,12 @@ fn read_repo(path: &Path) -> RepoInfo {
     }
 }
 
-/// Verzamel repo's vanaf `dir`. Een git-repo stopt het verder afdalen.
-fn collect_repos(dir: &Path, depth: usize, out: &mut Vec<RepoInfo>) {
+/// Verzamel de paden van repo's vanaf `dir`. Een git-repo stopt het verder
+/// afdalen. We verzamelen alleen paden (goedkoop); het uitlezen van de git-stand
+/// (duur: ~6 subprocessen per repo) gebeurt daarna parallel.
+fn collect_repo_paths(dir: &Path, depth: usize, out: &mut Vec<PathBuf>) {
     if is_git_repo(dir) {
-        out.push(read_repo(dir));
+        out.push(dir.to_path_buf());
         return;
     }
     if depth >= MAX_DEPTH {
@@ -382,14 +409,39 @@ fn collect_repos(dir: &Path, depth: usize, out: &mut Vec<RepoInfo>) {
         if is_ignored(&name) {
             continue;
         }
-        collect_repos(&path, depth + 1, out);
+        collect_repo_paths(&path, depth + 1, out);
     }
+}
+
+/// Lees de git-stand van alle repo's parallel uit. Elke `read_repo` start losse
+/// `git`-subprocessen, dus dit schaalt over CPU-kernen i.p.v. strikt serieel.
+/// Volgorde is niet gegarandeerd; de aanroeper sorteert alsnog.
+fn read_repos_parallel(paths: &[PathBuf]) -> Vec<RepoInfo> {
+    if paths.is_empty() {
+        return Vec::new();
+    }
+    let workers = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(4)
+        .min(paths.len());
+    let chunk_size = paths.len().div_ceil(workers);
+
+    std::thread::scope(|scope| {
+        let handles: Vec<_> = paths
+            .chunks(chunk_size)
+            .map(|chunk| scope.spawn(move || chunk.iter().map(|p| read_repo(p)).collect::<Vec<_>>()))
+            .collect();
+        handles
+            .into_iter()
+            .flat_map(|h| h.join().unwrap_or_default())
+            .collect()
+    })
 }
 
 /// Scan alle root-mappen. Direct-onderliggende mappen zonder enige git-repo
 /// erin worden als "nog geen git" teruggegeven.
 pub fn scan_roots(roots: Vec<String>) -> ScanResult {
-    let mut repos: Vec<RepoInfo> = Vec::new();
+    let mut repo_paths: Vec<PathBuf> = Vec::new();
     let mut no_git: Vec<NoGitFolder> = Vec::new();
 
     for root in roots {
@@ -407,18 +459,20 @@ pub fn scan_roots(roots: Vec<String>) -> ScanResult {
             if is_ignored(&name) {
                 continue;
             }
-            let mut found: Vec<RepoInfo> = Vec::new();
-            collect_repos(&child, 0, &mut found);
+            let mut found: Vec<PathBuf> = Vec::new();
+            collect_repo_paths(&child, 0, &mut found);
             if found.is_empty() {
                 no_git.push(NoGitFolder {
                     path: child.to_string_lossy().to_string(),
                     name,
                 });
             } else {
-                repos.extend(found);
+                repo_paths.extend(found);
             }
         }
     }
+
+    let mut repos = read_repos_parallel(&repo_paths);
 
     // Stabiele, voorspelbare volgorde op naam.
     repos.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
@@ -455,6 +509,11 @@ KEY=$(printf '%s' "$DIR" | shasum | cut -d' ' -f1)
 F="$BASE/$KEY.json"
 if [ "$1" = "end" ]; then
   rm -f "$F"
+elif [ "$1" = "stop" ]; then
+  # Claude heeft de beurt teruggegeven (klaar of wacht op antwoord/vervolgopdracht).
+  printf '{"state":"idle","ts":%s,"path":"%s"}\n' "$(date +%s)" "$DIR" > "$F"
+  NAME=$(basename "$DIR")
+  osascript -e "display notification \"Klaar — bekijk het venster of geef een vervolgopdracht.\" with title \"ProjectRadar · $NAME\"" >/dev/null 2>&1 &
 else
   printf '{"state":"%s","ts":%s,"path":"%s"}\n' "$1" "$(date +%s)" "$DIR" > "$F"
 fi
@@ -482,7 +541,7 @@ fn ensure_claude_hooks() -> Result<(PathBuf, PathBuf), String> {
             // Ververst de "busy"-tijdstempel tijdens actief werk, zodat een
             // vastgelopen/afgebroken sessie als verouderd herkend kan worden.
             "PostToolUse": [cmd("busy")],
-            "Stop": [cmd("idle")],
+            "Stop": [cmd("stop")],
             "SessionEnd": [cmd("end")],
         }
     });
@@ -496,12 +555,11 @@ fn ensure_claude_hooks() -> Result<(PathBuf, PathBuf), String> {
     Ok((hooks_path, script))
 }
 
-/// Bouw de shell-regel om Claude Code te starten met `prompt` als eerste bericht.
-/// De prompt gaat via een tijdelijk bestand zodat aanhalingstekens/nieuwe regels
-/// veilig zijn; het bestand wordt na inlezen meteen verwijderd. Hooks (via
-/// --settings) houden de live bezig/idle-status bij. De regel wordt in een
-/// ingebouwde terminal (PTY) uitgevoerd.
-pub fn claude_shell_line(path: String, prompt: String) -> Result<String, String> {
+/// Schrijft de prompt naar een tijdelijk bestand en zorgt dat de status-hooks
+/// staan. Gedeeld door `claude_shell_line` en `claude_shell_line_capture_exit`
+/// — het enige verschil tussen die twee zit in het laatste commando van de
+/// gebouwde regel, dus alleen dat blijft apart.
+fn prepare_claude_invocation(path: &str, prompt: &str) -> Result<(String, String, String, String), String> {
     use std::time::{SystemTime, UNIX_EPOCH};
     let stamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -512,16 +570,51 @@ pub fn claude_shell_line(path: String, prompt: String) -> Result<String, String>
 
     let (hooks_path, script) = ensure_claude_hooks()?;
 
-    let file_q = shell_single_quote(&file.to_string_lossy());
-    let path_q = shell_single_quote(&path);
-    let hooks_q = shell_single_quote(&hooks_path.to_string_lossy());
-    let script_q = shell_single_quote(&script.to_string_lossy());
+    Ok((
+        shell_single_quote(path),
+        shell_single_quote(&file.to_string_lossy()),
+        shell_single_quote(&hooks_path.to_string_lossy()),
+        shell_single_quote(&script.to_string_lossy()),
+    ))
+}
 
-    // Lees de prompt in en verwijder het bestand; markeer meteen "busy"; start
-    // Claude met volledige permissies + hooks; markeer "end" zodra Claude stopt.
+/// Bouw de shell-regel om Claude Code te starten met `prompt` als eerste bericht.
+/// De prompt gaat via een tijdelijk bestand zodat aanhalingstekens/nieuwe regels
+/// veilig zijn; het bestand wordt na inlezen meteen verwijderd. Hooks (via
+/// --settings) houden de live bezig/idle-status bij. De regel wordt in een
+/// ingebouwde terminal (PTY) uitgevoerd.
+///
+/// Let op: de regel eindigt op `; sh '{script}' end` — met een `;`, niet
+/// `&&` — zodat de "end"-hook altijd draait, ook als Claude zelf faalt. Dat
+/// betekent dat de PTY altijd exit-code 0 teruggeeft, ongeacht of Claude
+/// slaagde. Voor aanroepers die dat wél moeten weten (de nachtelijke
+/// prompt-runner): gebruik `claude_shell_line_capture_exit`.
+pub fn claude_shell_line(path: String, prompt: String) -> Result<String, String> {
+    let (path_q, file_q, hooks_q, script_q) = prepare_claude_invocation(&path, &prompt)?;
     Ok(format!(
         "cd '{path_q}' && PROMPT=\"$(cat '{file_q}')\" && rm -f '{file_q}' && sh '{script_q}' busy && claude --dangerously-skip-permissions --settings '{hooks_q}' \"$PROMPT\"; sh '{script_q}' end"
     ))
+}
+
+/// Zelfde opbouw als `claude_shell_line`, maar bewaart Claude's eigen
+/// exit-code als de exit-code van de hele regel (`CLAUDE_EXIT=$?` meteen na
+/// het commando, `exit $CLAUDE_EXIT` als allerlaatste stap — ná de
+/// status-hook, die dus nog steeds altijd draait). Gebruikt door de
+/// nachtelijke prompt-runner om "geslaagd" objectief vast te stellen: geen
+/// garantie dat de taak inhoudelijk klopt, wel dat Claude niet crashte of
+/// werd afgebroken.
+pub fn claude_shell_line_capture_exit(path: &str, prompt: &str) -> Result<String, String> {
+    let (path_q, file_q, hooks_q, script_q) = prepare_claude_invocation(path, prompt)?;
+    Ok(format!(
+        "cd '{path_q}' && PROMPT=\"$(cat '{file_q}')\" && rm -f '{file_q}' && sh '{script_q}' busy && claude --dangerously-skip-permissions --settings '{hooks_q}' \"$PROMPT\"; CLAUDE_EXIT=$?; sh '{script_q}' end; exit $CLAUDE_EXIT"
+    ))
+}
+
+/// Zelfde normalisatie als `projectKey` in `src/lib/format.ts` — moet in sync
+/// blijven. Gebruikt om PromptPad-projectnamen (uit Supabase) te matchen
+/// tegen ProjectRadar-projectsleutels.
+pub fn project_key(name: &str) -> String {
+    name.trim().to_lowercase()
 }
 
 #[derive(Serialize)]
@@ -651,5 +744,63 @@ pub fn git_init(path: String) -> Result<(), String> {
         Ok(())
     } else {
         Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn port_from_flags_variants() {
+        assert_eq!(port_from_flags("vite --port 5173"), Some(5173));
+        assert_eq!(port_from_flags("next dev --port=3001"), Some(3001));
+        assert_eq!(port_from_flags("serve -p 8080"), Some(8080));
+        assert_eq!(port_from_flags("astro dev"), None);
+        // Trailing niet-cijfers worden afgeknipt.
+        assert_eq!(port_from_flags("vite --port=4321;"), Some(4321));
+    }
+
+    #[test]
+    fn port_from_config_finds_first() {
+        assert_eq!(
+            port_from_config("export default { server: { port: 5180 } }"),
+            Some(5180)
+        );
+        assert_eq!(port_from_config("port=1234"), Some(1234));
+        assert_eq!(port_from_config("geen poort hier"), None);
+    }
+
+    #[test]
+    fn shell_single_quote_escapes_quotes() {
+        assert_eq!(shell_single_quote("plain"), "plain");
+        assert_eq!(shell_single_quote("a'b"), "a'\\''b");
+    }
+
+    #[test]
+    fn capture_exit_variant_preserves_claudes_own_exit_code() {
+        let line = claude_shell_line_capture_exit("/tmp/proj", "doe iets").unwrap();
+        // De gewone variant laat de status-hook als laatste (na `;`) draaien,
+        // dus geeft altijd 0 terug — precies het gat dat deze variant dicht.
+        assert!(line.contains("CLAUDE_EXIT=$?"));
+        assert!(line.ends_with("exit $CLAUDE_EXIT"));
+        // Status-hook moet nog steeds draaien, ook als Claude faalt.
+        assert!(line.contains("sh ") && line.contains("end; exit"));
+    }
+
+    #[test]
+    fn project_key_matches_format_ts_normalization() {
+        assert_eq!(project_key("  Mike's Site "), "mike's site");
+        assert_eq!(project_key("ProjectRadar"), "projectradar");
+    }
+
+    #[test]
+    fn detect_dev_url_respects_stack() {
+        // Tauri-apps openen hun eigen venster: geen browser-URL.
+        let none = detect_dev_url(Path::new("/tmp/does-not-exist"), &["Tauri".to_string()]);
+        assert_eq!(none, None);
+        // Een Vite-frontend valt terug op de default-poort 5173.
+        let url = detect_dev_url(Path::new("/tmp/does-not-exist"), &["Vite".to_string()]);
+        assert_eq!(url, Some("http://localhost:5173".to_string()));
     }
 }
