@@ -225,11 +225,12 @@ button { font-family: inherit; }
 .term-toggle:hover { color: #e8eef9; }
 .term-dock:not(.open) .term-body { display: none; }
 .term-body { flex: 1; min-height: 0; position: relative; background: #0a1424; }
-/* overflow: auto — nodig voor managed (nachtelijke) tabs: die krijgen een vast
-   formaat i.p.v. mee te fitten aan het paneel (zie TerminalDock.tsx), en zijn
-   met 32 rijen doorgaans hoger dan de 320px-dock. Zonder scroll-container was
-   dat overtollige stuk gewoon onbereikbaar. */
-.term-host { position: absolute; inset: 0; padding: 6px 8px; overflow: auto; }
+/* Verticaal nooit scrollen: dat doet xterm zelf, en die heeft de scrollback.
+   Zou deze container het overnemen (wat gebeurde toen managed tabs een vaste
+   hoogte van 32 rijen hadden), dan scrolt hij alleen door het zichtbare blok
+   en blijft de geschiedenis onbereikbaar. Horizontaal wél: een managed tab
+   staat vast op 100 kolommen en past niet in een smal venster. */
+.term-host { position: absolute; inset: 0; padding: 6px 8px; overflow-x: auto; overflow-y: hidden; }
 .term-empty { color: #5d739a; font-size: 13px; padding: 18px; }
 .top { display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; gap:16px; }
 .top h1 { font-size:22px; font-weight:650; letter-spacing:.2px; }

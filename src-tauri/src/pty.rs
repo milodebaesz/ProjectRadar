@@ -213,15 +213,20 @@ pub fn pty_kill(state: State<'_, PtyState>, id: u64) -> Result<(), String> {
 
 const MAX_MANAGED_OUTPUT: usize = 1_000_000;
 
-/// Vast PTY-formaat voor managed sessies. Moet in sync blijven met de
-/// xterm.js-instantie in `TerminalDock.tsx` (managed-tak) — die past zich
-/// bewust NIET aan het paneel aan (zoals de interactieve tak via
-/// `ResizeObserver`/`ptyResize` wél doet), want er is niemand om een
-/// live-resize aan door te geven aan een sessie die al liep vóór er een
-/// webview was. Staan deze twee los van elkaar, dan schrijft Claude cursor-
-/// en regelverplaatsingen uitgaand van dít formaat, terwijl de viewer ze op
-/// een ander formaat interpreteert — dat ziet er precies uit als door elkaar
-/// lopende tekst en een vastgelopen scroll.
+/// Vast PTY-formaat voor managed sessies. `MANAGED_COLS` moet in sync blijven
+/// met `TerminalDock.tsx` (managed-tak): die fit bewust niet op de breedte en
+/// stuurt geen `ptyResize` terug, want er is niemand om een live-resize aan
+/// door te geven aan een sessie die al liep vóór er een webview was. Wijken
+/// de kolommen af, dan schrijft Claude regelafbrekingen en cursorkolommen
+/// uitgaand van dít formaat terwijl de viewer ze op een ander interpreteert —
+/// dat ziet eruit als door elkaar lopende tekst.
+///
+/// `MANAGED_ROWS` is alleen de starthoogte van de PTY. De viewer fit zijn
+/// hoogte wél op het paneel: hield hij die vast op 32 rijen, dan werd het
+/// terminal-element hoger dan de dock, nam de omliggende container het
+/// verticaal scrollen over en was xterm's scrollback onbereikbaar — je kon
+/// dan niet terugkijken in een nachtelijke run. Rijen mogen afwijken; wat
+/// bovenaan uit beeld loopt bewaart xterm in zijn scrollback.
 pub const MANAGED_COLS: u16 = 100;
 pub const MANAGED_ROWS: u16 = 32;
 

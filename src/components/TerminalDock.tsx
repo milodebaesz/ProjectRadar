@@ -22,9 +22,11 @@ export interface TermSpec {
 }
 
 // Moet in sync blijven met MANAGED_COLS/MANAGED_ROWS in src-tauri/src/pty.rs.
-// De managed-viewer past zich bewust niet aan het paneel aan (geen fit(),
-// geen resize teruggestuurd naar de PTY) — zie de comment daar voor waarom
-// een mismatch hier tot door elkaar lopende tekst leidt.
+// MANAGED_COLS is bindend: de managed-viewer fit bewust niet op de breedte en
+// stuurt geen resize terug naar de PTY, want die sessie draait al en er is
+// niemand om het aan door te geven — wijkt de breedte af, dan landen
+// regelafbrekingen en cursorkolommen verkeerd. MANAGED_ROWS is alleen de
+// startwaarde; de hoogte fit wél mee, zie de toelichting in de managed-tak.
 const MANAGED_COLS = 100;
 const MANAGED_ROWS = 32;
 
@@ -49,6 +51,9 @@ function TerminalView({ spec, active, onExit }: { spec: TermSpec; active: boolea
   const hostRef = useRef<HTMLDivElement>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const ptyId = useRef<number | null>(null);
+  /** Opnieuw passen op het paneel. Verschilt per tab-soort: een gewone tab
+   *  fit op beide assen, een managed tab alleen op de hoogte (zie hieronder). */
+  const refitRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     const host = hostRef.current!;
@@ -71,11 +76,28 @@ function TerminalView({ spec, active, onExit }: { spec: TermSpec; active: boolea
     // read-only, dit is een venster op een run die al liep, geen console erop.
     if (spec.managedId != null) {
       const id = spec.managedId;
-      // Vast formaat, gelijk aan de PTY die Rust al opende (zie pty.rs) —
-      // bewust GEEN fit()/ResizeObserver: die zouden xterm.js lokaal een
-      // ander aantal kolommen/rijen geven dan waar de sessie al vanuit
-      // schrijft, wat cursor-verplaatsingen op de verkeerde plek laat landen.
+      // De bréédte blijft vast op MANAGED_COLS: daar rekent de al draaiende
+      // sessie mee voor regelafbreking en cursorkolommen, en er is niemand om
+      // een live-resize aan door te geven (zie pty.rs).
+      //
+      // De hóógte moet juist wél meebewegen. Stond die vast op MANAGED_ROWS,
+      // dan werd het terminal-element ~544px hoog in een dock van ~280px;
+      // de buitenste .term-host nam dan het verticaal scrollen over en xterm
+      // hield zijn eigen viewport op volle hoogte — waardoor de scrollback
+      // onbereikbaar was en je in een nachtelijke run niet kon terugkijken,
+      // terwijl dat in een gewone (fittende) tab wel gewoon werkt. Rijen
+      // mogen afwijken van de PTY: wat er bovenaan uit beeld loopt bewaart
+      // xterm in de scrollback in plaats van het weg te gooien.
+      const fitRows = () => {
+        if (!host.clientHeight) return; // inactieve tab heeft geen zinnige maat
+        const rows = fit.proposeDimensions()?.rows;
+        if (rows && rows !== term.rows) term.resize(MANAGED_COLS, rows);
+      };
       term.resize(MANAGED_COLS, MANAGED_ROWS);
+      fitRows();
+      refitRef.current = fitRows;
+      const managedRo = new ResizeObserver(fitRows);
+      managedRo.observe(host);
       term.write("\x1b[2m— nachtelijke run, alleen-lezen —\x1b[0m\r\n");
       let offset = 0;
       let timer: ReturnType<typeof setTimeout> | null = null;
@@ -97,17 +119,22 @@ function TerminalView({ spec, active, onExit }: { spec: TermSpec; active: boolea
       poll();
       return () => {
         disposed = true;
+        managedRo.disconnect();
         if (timer) clearTimeout(timer);
         term.dispose();
       };
     }
 
-    requestAnimationFrame(() => {
+    refitRef.current = () => {
       try {
         fit.fit();
       } catch {
         /* leeg */
       }
+    };
+
+    requestAnimationFrame(() => {
+      refitRef.current();
       const onData = new Channel<number[]>();
       onData.onmessage = (bytes) => term.write(new Uint8Array(bytes));
 
@@ -151,22 +178,20 @@ function TerminalView({ spec, active, onExit }: { spec: TermSpec; active: boolea
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Bij actief worden: opnieuw passen op de (nu zichtbare) container.
+  // Bij actief worden: opnieuw passen op de (nu zichtbare) container. Een
+  // verborgen tab heeft hoogte 0, dus de maat die hij ondertussen kreeg klopt
+  // niet meer. Geldt ook voor managed tabs — die passen alleen hun hoogte aan,
+  // wat refitRef per tab-soort afhandelt.
   useEffect(() => {
-    // Managed (nachtelijke) tabs hebben een vast formaat — niet meefitten
-    // aan het paneel, zie de toelichting bovenaan de managed-tak hierboven.
-    if (!active || spec.managedId != null) return;
+    if (!active) return;
     requestAnimationFrame(() => {
       try {
-        fitRef.current?.fit();
-        if (ptyId.current != null) {
-          // cols/rows zitten in de fit; resize wordt door ResizeObserver ook getriggerd
-        }
+        refitRef.current();
       } catch {
         /* leeg */
       }
     });
-  }, [active, spec.managedId]);
+  }, [active]);
 
   return <div ref={hostRef} className="term-host" style={{ display: active ? "block" : "none" }} />;
 }
