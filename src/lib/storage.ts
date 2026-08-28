@@ -5,6 +5,7 @@ const META_KEY = "projectradar.meta";
 const IGNORED_KEY = "projectradar.ignored";
 const THEME_KEY = "projectradar.theme";
 const PANELS_KEY = "projectradar.panels";
+const NIGHTLY_SEEN_KEY = "projectradar.nightlySeenAt";
 
 const DEFAULT_SETTINGS: Settings = {
   roots: [],
@@ -101,6 +102,18 @@ export function savePanelCollapsed(id: string, collapsed: boolean): void {
   const all = loadAllPanelState();
   all[id] = collapsed;
   localStorage.setItem(PANELS_KEY, JSON.stringify(all));
+}
+
+/**
+ * Wanneer je het nachtoverzicht voor het laatst bekeek. Bepaalt of er een
+ * "nieuw"-markering staat; leeg = nog nooit gekeken, dan is alles nieuw.
+ */
+export function loadNightlySeenAt(): string | null {
+  return localStorage.getItem(NIGHTLY_SEEN_KEY);
+}
+
+export function saveNightlySeenAt(iso: string): void {
+  localStorage.setItem(NIGHTLY_SEEN_KEY, iso);
 }
 
 export function loadTheme(): "light" | "dark" {

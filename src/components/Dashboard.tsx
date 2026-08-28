@@ -2,6 +2,8 @@ import { useMemo, useState } from "react";
 import type { ClaudeState, NoGitFolder, Project, Status } from "../types";
 import { byRank, effectiveStack, reorderProjects, statusOf } from "../lib/model";
 import ProjectCard from "./ProjectCard";
+import type { NightlyRun } from "../lib/tauri";
+import { summarize, summaryText } from "../lib/nightly";
 
 type Filter = "alle" | Status;
 type Sort = "recent" | "naam" | "eigen";
@@ -48,6 +50,9 @@ interface Props {
   onIgnore: (path: string) => void;
   onOpenPath: (path: string) => void;
   onGoSettings: () => void;
+  /** Nachtelijke runs die je nog niet hebt bekeken; voedt de ochtendbanner. */
+  nightlyUnseen?: NightlyRun[];
+  onOpenNightly?: () => void;
 }
 
 export default function Dashboard({
@@ -69,6 +74,8 @@ export default function Dashboard({
   onIgnore,
   onOpenPath,
   onGoSettings,
+  nightlyUnseen = [],
+  onOpenNightly,
 }: Props) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("alle");
@@ -131,6 +138,23 @@ export default function Dashboard({
           {scanning ? "Scannen…" : "↻ Scannen"}
         </button>
       </div>
+
+      {nightlyUnseen.length > 0 && onOpenNightly && (
+        // Het ochtendoverzicht hoort je te vinden, niet andersom: zolang je de
+        // runs van vannacht nog niet gezien hebt, staat het hier.
+        <div className="banner nightly">
+          <div className="next-step-content">
+            <div className="next-step-phase">Vannacht</div>
+            <div className="next-step-text">
+              {nightlyUnseen.length} {nightlyUnseen.length === 1 ? "prompt" : "prompts"} opgepakt ·{" "}
+              {summaryText(summarize(nightlyUnseen))}
+            </div>
+          </div>
+          <button className="btn" onClick={onOpenNightly}>
+            ☾ Bekijken
+          </button>
+        </div>
+      )}
 
       {!hasRoots ? (
         <div className="empty">

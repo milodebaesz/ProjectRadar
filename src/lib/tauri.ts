@@ -250,3 +250,25 @@ export interface NightlyStatusInfo {
 export async function nightlyStatus(): Promise<NightlyStatusInfo> {
   return invoke<NightlyStatusInfo>("nightly_status");
 }
+
+/** Afloop van één 's nachts opgepakte prompt. */
+export type RunOutcome = "done" | "failed" | "skipped";
+
+export interface NightlyRun {
+  promptId: string;
+  title: string;
+  projectName: string;
+  projectKey: string;
+  startedAt: string;
+  finishedAt: string | null;
+  outcome: RunOutcome;
+  /** Waarom overgeslagen of mislukt; leeg bij succes. */
+  reason: string | null;
+  /** Volledige output op schijf, te lezen met `readLogFile`. */
+  logPath: string | null;
+}
+
+/** Het nachtjournaal, nieuwste eerst — voedt het ochtendoverzicht. */
+export async function nightlyRuns(): Promise<NightlyRun[]> {
+  return invoke<NightlyRun[]>("nightly_runs");
+}

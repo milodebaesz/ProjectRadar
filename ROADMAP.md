@@ -168,6 +168,17 @@ zonder dat je zelf hoeft te navigeren.
 
 **Doel:** context-switching kosten verlagen; de app weet waar je gebleven was.
 
+- [x] **Ochtendoverzicht van nachtelijke runs:** de uitkomst per prompt ging
+      alleen naar Supabase en naar `eprintln!`, en de sessies leven in het
+      geheugen van `ManagedState` — na een herstart was er dus niets meer terug
+      te vinden van wat er 's nachts gebeurd was. Er is nu een nachtjournaal
+      op schijf (`~/.projectradar/nightly-runs.json`) met per prompt de
+      uitkomst (klaar / mislukt / overgeslagen), de reden en een verwijzing
+      naar de volledige output (`~/.projectradar/claude/nightly-*.log`). De
+      weergave groepeert per nacht en staat onder **Nachtelijke runs**; zolang
+      je de runs van vannacht nog niet gezien hebt, staat er een banner op het
+      dashboard en een teller in de zijbalk.
+
 - [x] **"Pak de draad op":** één knop in het projectdetail die Claude direct start
       op de eerstvolgende openstaande mijlpaal — inclusief fase-context en instructie
       om de mijlpaal af te vinken in `.projectradar.json` zodra hij klaar is

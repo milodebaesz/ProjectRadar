@@ -173,7 +173,8 @@ pub fn run() {
             nightly::nightly_sessions,
             nightly::nightly_read,
             nightly::nightly_run_now,
-            nightly::nightly_status
+            nightly::nightly_status,
+            nightly::nightly_runs
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -241,6 +241,11 @@
           "id": "statistieken",
           "text": "Statistieken-view: commits/week per project, totaal actieve projecten",
           "done": false
+        },
+        {
+          "id": "ochtendoverzicht",
+          "text": "Ochtendoverzicht: nachtjournaal op schijf met uitkomst per prompt, gegroepeerd per nacht",
+          "done": true
         }
       ]
     },

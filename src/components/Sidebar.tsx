@@ -2,7 +2,7 @@ import type { MachineInfo } from "../types";
 import { relativeTime } from "../lib/format";
 import type { TermSpec } from "./TerminalDock";
 
-export type View = "overzicht" | "instellingen";
+export type View = "overzicht" | "nacht" | "instellingen";
 
 interface Props {
   view: View;
@@ -16,6 +16,8 @@ interface Props {
   synced: boolean;
   /** Laatste cloud-sync-fout; blijft staan tot een geslaagde sync (null). */
   syncError: string | null;
+  /** Aantal nachtelijke runs dat je nog niet hebt bekeken. */
+  nightlyUnseen?: number;
   /** Actieve terminal-processen (voor de "actieve processen"-lijst). */
   terminals?: TermSpec[];
   activeTermId?: string | null;
@@ -33,6 +35,7 @@ export default function Sidebar({
   scanning,
   synced,
   syncError,
+  nightlyUnseen = 0,
   terminals = [],
   activeTermId = null,
   onSelectTerminal,
@@ -50,6 +53,14 @@ export default function Sidebar({
           onClick={() => onNav("overzicht")}
         >
           <span className="ic">▦</span> Overzicht
+        </button>
+        <button className={view === "nacht" ? "on" : ""} onClick={() => onNav("nacht")}>
+          <span className="ic">☾</span> Nachtelijke runs
+          {nightlyUnseen > 0 && (
+            <span className="nav-badge" title={`${nightlyUnseen} nieuw sinds je laatste bezoek`}>
+              {nightlyUnseen}
+            </span>
+          )}
         </button>
         <button
           className={view === "instellingen" ? "on" : ""}

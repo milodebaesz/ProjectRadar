@@ -115,7 +115,17 @@ fn append_fired(entry: FiredEntry) {
 /// Lees het logbestand van een autonome run terug (voor "wat is er gebeurd
 /// terwijl ik weg was").
 pub fn read_log_file(path: String) -> Result<String, String> {
-    std::fs::read_to_string(&path).map_err(|e| format!("Lezen mislukt: {e}"))
+    // Alleen logs uit ~/.projectradar. Zonder deze grens is dit een
+    // algemene "lees elk bestand"-opdracht voor de webview, terwijl er niets
+    // buiten die map te lezen valt. Canonicaliseren eerst, anders komt een
+    // pad met .. er alsnog uit.
+    let base = base_dir()?;
+    let full = std::fs::canonicalize(&path).map_err(|e| format!("Lezen mislukt: {e}"))?;
+    let root = std::fs::canonicalize(&base).unwrap_or(base);
+    if !full.starts_with(&root) {
+        return Err("Buiten de Projectradar-map — niet gelezen.".into());
+    }
+    std::fs::read_to_string(&full).map_err(|e| format!("Lezen mislukt: {e}"))
 }
 
 /// Zelfde opbouw als `buildPhasePrompt` in `model.ts` — moet in sync blijven.

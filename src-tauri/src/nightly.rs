@@ -90,6 +90,98 @@ pub fn nightly_status() -> NightlyStatus {
     read_status()
 }
 
+// ── Nachtjournaal ────────────────────────────────────────────────────────
+//
+// `nightly-status.json` houdt één samenvattingsregel bij ("3 gevonden, 2
+// gematcht, 2 gestart"). Genoeg om te zien dát de lus draaide, te weinig om
+// 's ochtends te weten wélke prompts zijn opgepakt en hoe ze afliepen. De
+// uitkomst per prompt ging tot nu toe alleen naar Supabase en naar
+// eprintln!, en de sessies zelf leven in het geheugen van `ManagedState` —
+// dus zodra de app herstart was, was er niets meer terug te vinden.
+//
+// Dit bestand overleeft dat: één regel per prompt, met uitkomst, reden en
+// een verwijzing naar de volledige output op schijf.
+
+const MAX_RUNS: usize = 200;
+
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum RunOutcome {
+    /// Claude sloot zonder fout af.
+    Done,
+    /// Claude crashte of gaf een niet-nul exit-code.
+    Failed,
+    /// Nooit gestart: geen gekoppeld project, project niet op deze Mac, of
+    /// een ander proces was net eerder met claimen.
+    Skipped,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct NightlyRun {
+    pub prompt_id: String,
+    pub title: String,
+    /// Projectnaam zoals PromptPad 'm kent; leeg als de prompt er geen had.
+    pub project_name: String,
+    pub project_key: String,
+    pub started_at: String,
+    pub finished_at: Option<String>,
+    pub outcome: RunOutcome,
+    /// Waarom overgeslagen of mislukt; leeg bij succes.
+    pub reason: Option<String>,
+    /// Volledige output op schijf, als die bewaard kon worden.
+    pub log_path: Option<String>,
+}
+
+fn runs_path() -> Option<PathBuf> {
+    let home = std::env::var("HOME").ok()?;
+    Some(PathBuf::from(home).join(".projectradar").join("nightly-runs.json"))
+}
+
+fn read_runs() -> Vec<NightlyRun> {
+    runs_path()
+        .and_then(|p| std::fs::read_to_string(p).ok())
+        .and_then(|raw| serde_json::from_str(&raw).ok())
+        .unwrap_or_default()
+}
+
+/// Zet één run vooraan in het journaal en kapt de staart af.
+fn record_run(run: NightlyRun) {
+    let Some(path) = runs_path() else { return };
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let mut runs = read_runs();
+    runs.insert(0, run);
+    runs.truncate(MAX_RUNS);
+    if let Ok(raw) = serde_json::to_string_pretty(&runs) {
+        let _ = std::fs::write(path, raw);
+    }
+}
+
+/// Prompt-id's komen uit Supabase en belanden in een bestandsnaam, dus alles
+/// wat geen letter/cijfer/streepje is gaat eruit.
+fn safe_id(id: &str) -> String {
+    id.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '-').take(64).collect()
+}
+
+/// Schrijf de volledige sessie-output weg zodat je 'm morgen nog kunt lezen,
+/// ook als de app tussendoor herstart is. Geeft het pad terug.
+fn write_run_log(prompt_id: &str, output: &[u8]) -> Option<String> {
+    let home = std::env::var("HOME").ok()?;
+    let dir = PathBuf::from(home).join(".projectradar").join("claude");
+    std::fs::create_dir_all(&dir).ok()?;
+    let path = dir.join(format!("nightly-{}.log", safe_id(prompt_id)));
+    std::fs::write(&path, output).ok()?;
+    Some(path.to_string_lossy().to_string())
+}
+
+/// Het nachtjournaal, nieuwste eerst — voedt het ochtendoverzicht in de UI.
+#[tauri::command]
+pub fn nightly_runs() -> Vec<NightlyRun> {
+    read_runs()
+}
+
 /// key -> lokaal pad, gepusht door de frontend na elke scan. Alleen projecten
 /// die hier in staan hebben op déze Mac een map om Claude in te starten.
 #[derive(Default)]
@@ -262,6 +354,18 @@ fn fail_unmatched(client: &reqwest::blocking::Client, base: &str, key: &str, pro
     if claim(client, base, key, &prompt.id) {
         finish(client, base, key, &prompt.id, false, reason);
     }
+    let name = prompt.pp_projects.as_ref().map(|r| r.name.clone()).unwrap_or_default();
+    record_run(NightlyRun {
+        prompt_id: prompt.id.clone(),
+        title: prompt.title.clone(),
+        project_key: crate::git::project_key(&name),
+        project_name: name,
+        started_at: chrono::Local::now().to_rfc3339(),
+        finished_at: Some(chrono::Local::now().to_rfc3339()),
+        outcome: RunOutcome::Skipped,
+        reason: Some(reason.to_string()),
+        log_path: None,
+    });
 }
 
 fn last_output_tail(bytes: &[u8], max: usize) -> String {
@@ -347,30 +451,65 @@ fn run_batch_inner(app: &AppHandle, managed: ManagedState, paths: Arc<Mutex<Hash
 
     let mut started = 0;
     for (project_key, path, prompt) in queue {
+        let project_name = prompt.pp_projects.as_ref().map(|r| r.name.clone()).unwrap_or_default();
+        // Eén sjabloon per prompt; alleen de afloop verschilt per tak.
+        let journal = |outcome: RunOutcome, started_at: String, reason: Option<String>, log_path: Option<String>| NightlyRun {
+            prompt_id: prompt.id.clone(),
+            title: prompt.title.clone(),
+            project_name: project_name.clone(),
+            project_key: project_key.clone(),
+            started_at,
+            finished_at: Some(chrono::Local::now().to_rfc3339()),
+            outcome,
+            reason,
+            log_path,
+        };
+
+        let started_at = chrono::Local::now().to_rfc3339();
         if !claim(&client, &base, &key, &prompt.id) {
             eprintln!("[nightly] Claimen van \"{}\" mislukt (al door iemand anders opgepikt, of de patch faalde).", prompt.title);
+            record_run(journal(
+                RunOutcome::Skipped,
+                started_at,
+                Some("Niet geclaimd — al door een andere run opgepakt, of de patch naar Supabase faalde.".into()),
+                None,
+            ));
             continue;
         }
         let line = match crate::git::claude_shell_line_capture_exit(&path, &prompt.body) {
             Ok(l) => l,
-            Err(e) => { eprintln!("[nightly] Shell-regel bouwen mislukt: {e}"); finish(&client, &base, &key, &prompt.id, false, &e); continue; }
+            Err(e) => {
+                eprintln!("[nightly] Shell-regel bouwen mislukt: {e}");
+                finish(&client, &base, &key, &prompt.id, false, &e);
+                record_run(journal(RunOutcome::Failed, started_at, Some(e), None));
+                continue;
+            }
         };
         let (id, rx) = spawn_managed(&managed, path.clone(), line, project_key.clone(), prompt.title.clone());
         eprintln!("[nightly] Sessie {id} gestart voor \"{}\".", prompt.title);
         started += 1;
         let _ = app.emit("nightly-session-started", id);
         let ok = rx.recv().unwrap_or(false); // blokkeert: volgende prompt wacht tot deze klaar is
-        let tail = managed
-            .sessions
-            .lock()
-            .unwrap()
-            .get(&id)
-            .map(|s| last_output_tail(&s.output, 4000))
-            .unwrap_or_default();
+        // Volledige output naar schijf: de sessie zelf staat alleen in het
+        // geheugen en is na een herstart weg, terwijl je 'm 's ochtends juist
+        // wil kunnen nalezen.
+        let (tail, log_path) = {
+            let sessions = managed.sessions.lock().unwrap();
+            match sessions.get(&id) {
+                Some(s) => (last_output_tail(&s.output, 4000), write_run_log(&prompt.id, &s.output)),
+                None => (String::new(), None),
+            }
+        };
         finish(&client, &base, &key, &prompt.id, ok, &tail);
+        record_run(journal(
+            if ok { RunOutcome::Done } else { RunOutcome::Failed },
+            started_at,
+            if ok { None } else { Some("Claude sloot af met een fout — zie het logbestand.".into()) },
+            log_path,
+        ));
         let _ = app.emit("nightly-session-update", id);
     }
-    format!("{total} pending prompt(s) gevonden, {matched} gematcht, {started} gestart. Uitkomst per prompt staat in Supabase.")
+    format!("{total} pending prompt(s) gevonden, {matched} gematcht, {started} gestart. Uitkomst per prompt staat in het nachtjournaal (Nachtelijke runs).")
 }
 
 /// Lokale kalenderdag, niet UTC — moet in dezelfde klok blijven als de

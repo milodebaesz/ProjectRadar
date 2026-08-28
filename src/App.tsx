@@ -4,6 +4,7 @@ import { uid } from "./lib/format";
 import Sidebar, { type View } from "./components/Sidebar";
 import Dashboard from "./components/Dashboard";
 import SettingsView from "./components/Settings";
+import NightlyOverview from "./components/NightlyOverview";
 import ProjectDetail from "./components/ProjectDetail";
 import { localPath, runCommandOf, devUrlOf, portFromUrl, buildClaudePrompt, toggleMilestone } from "./lib/model";
 import {
@@ -34,6 +35,7 @@ import { useClaudeStatus } from "./hooks/useClaudeStatus";
 import { useScheduledRuns } from "./hooks/useScheduledRuns";
 import { useRemoteBridge } from "./hooks/useRemoteBridge";
 import { useNightlyRuns } from "./hooks/useNightlyRuns";
+import { useNightlyJournal } from "./hooks/useNightlyJournal";
 
 export default function App() {
   const tauri = isTauri();
@@ -98,6 +100,7 @@ export default function App() {
   } = useScan(tauri, showToast);
 
   const term = useTerminals(settings.roots[0] ?? "");
+  const nightly = useNightlyJournal(tauri);
   const claudeByKey = useClaudeStatus(tauri, projects, (key) => {
     const p = projects.find((x) => x.key === key);
     showToast(`${p?.name ?? "Project"}: Claude is klaar — roadmap wordt bijgewerkt…`);
@@ -286,6 +289,7 @@ export default function App() {
         scanning={scanning}
         synced={!!userEmail}
         syncError={syncError}
+        nightlyUnseen={nightly.unseen.length}
         terminals={term.terminals}
         activeTermId={term.activeTermId}
         onSelectTerminal={(id) => {
@@ -307,6 +311,8 @@ export default function App() {
           onClaude={handleClaude}
           onDelete={handleDelete}
         />
+      ) : view === "nacht" ? (
+        <NightlyOverview runs={nightly.runs} isTauri={tauri} onMarkSeen={nightly.markSeen} />
       ) : view === "instellingen" ? (
         <SettingsView
           settings={settings}
@@ -341,6 +347,8 @@ export default function App() {
           onIgnore={ignorePath}
           onOpenPath={openPath}
           onGoSettings={() => setView("instellingen")}
+          nightlyUnseen={nightly.unseen}
+          onOpenNightly={() => nav("nacht")}
         />
       )}
 
