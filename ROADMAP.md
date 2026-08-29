@@ -168,6 +168,20 @@ zonder dat je zelf hoeft te navigeren.
 
 **Doel:** context-switching kosten verlagen; de app weet waar je gebleven was.
 
+- [x] **Onbeheerde runs in print-modus:** de nachtrunner pakte alleen de
+      eerste van de wachtende prompts op, en de opgenomen sessie was niet te
+      scrollen. Eén oorzaak: `claude` draaide in de interactieve TUI. Die stopt
+      niet uit zichzelf als er niemand is om de sessie af te sluiten (gemeten:
+      6+ min zonder afsluiten, tegen 4,3 s in print-modus), dus bleef de runner
+      voor altijd op prompt 1 wachten. Diezelfde TUI tekent zichzelf steeds
+      opnieuw op dezelfde plek met absolute cursorposities, dus er schoof nooit
+      iets de scrollback in — er viel simpelweg niets terug te scrollen. Zowel
+      de nachtrunner als de scheduler gebruiken nu `--print --verbose`; de
+      interactieve knop houdt de TUI.
+      Daarnaast als vangnet: voltooiing komt uit `child.wait()` in plaats van
+      uit PTY-EOF (een achtergebleven kleinkind hield die anders open), en er
+      staat een bovengrens van 90 min per prompt met kill, zodat één
+      vastgelopen sessie de rest van de rij niet meeneemt.
 - [x] **Ochtendoverzicht van nachtelijke runs:** de uitkomst per prompt ging
       alleen naar Supabase en naar `eprintln!`, en de sessies leven in het
       geheugen van `ManagedState` — na een herstart was er dus niets meer terug

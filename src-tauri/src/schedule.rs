@@ -153,7 +153,12 @@ fn build_phase_prompt(phase_name: &str, milestones: &[String]) -> String {
 
 fn fire(entry: ScheduleEntry, app: &AppHandle) {
     let prompt = build_phase_prompt(&entry.phase_name, &entry.milestones);
-    let line = match crate::git::claude_shell_line(entry.project_path.clone(), prompt) {
+    // De onbeheerde variant (print-modus), net als de nachtrunner. Met de
+    // interactieve TUI stopte `claude` hier nooit uit zichzelf — er is niemand
+    // die de sessie afsluit — dus bleef er na elke geplande sprint een proces
+    // hangen, en bestond het logbestand vooral uit cursorstuurcodes van een
+    // scherm dat zichzelf steeds opnieuw tekende.
+    let line = match crate::git::claude_shell_line_capture_exit(&entry.project_path, &prompt) {
         Ok(l) => l,
         Err(_) => return,
     };

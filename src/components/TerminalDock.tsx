@@ -61,6 +61,11 @@ function TerminalView({ spec, active, onExit }: { spec: TermSpec; active: boolea
       fontFamily: '"SF Mono", "JetBrains Mono", Menlo, monospace',
       fontSize: 12.5,
       cursorBlink: true,
+      // xterm bewaart standaard 1000 regels. Een nachtelijke run in
+      // print-modus is een doorlopende transcriptie en zit daar makkelijk
+      // overheen, en dan valt juist het begin — waar de opdracht en het plan
+      // staan — als eerste weg.
+      scrollback: 10_000,
       theme: TERM_THEME,
     });
     const fit = new FitAddon();

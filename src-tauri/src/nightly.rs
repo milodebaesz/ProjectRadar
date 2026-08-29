@@ -30,6 +30,10 @@ const LAST_RUN_ACCOUNT: &str = "nightly-last-run-date";
 /// we tot de volgende nacht i.p.v. een gemiste run uren later alsnog te doen.
 const FIRE_HOUR_START: u32 = 3;
 const FIRE_HOUR_END: u32 = 6;
+/// Bovengrens per prompt. Ruim genoeg voor een echte sprint, maar eindig —
+/// anders houdt één vastgelopen sessie de rest van de rij tegen tot de
+/// ochtend.
+const MAX_PROMPT_RUNTIME: Duration = Duration::from_secs(90 * 60);
 
 // ── Blijvende status ─────────────────────────────────────────────────────
 //
@@ -485,11 +489,32 @@ fn run_batch_inner(app: &AppHandle, managed: ManagedState, paths: Arc<Mutex<Hash
                 continue;
             }
         };
-        let (id, rx) = spawn_managed(&managed, path.clone(), line, project_key.clone(), prompt.title.clone());
+        let (id, rx, killer) = spawn_managed(&managed, path.clone(), line, project_key.clone(), prompt.title.clone());
         eprintln!("[nightly] Sessie {id} gestart voor \"{}\".", prompt.title);
         started += 1;
         let _ = app.emit("nightly-session-started", id);
-        let ok = rx.recv().unwrap_or(false); // blokkeert: volgende prompt wacht tot deze klaar is
+
+        // Wachten tot deze prompt klaar is — de volgende staat erachter in de
+        // rij. Met een bovengrens: zonder die grens neemt één vastgelopen
+        // sessie de rest van de nacht mee, en dat is precies wat er gebeurde
+        // toen "klaar" nog van PTY-EOF afhing in plaats van van het proces.
+        let (ok, timed_out) = match rx.recv_timeout(MAX_PROMPT_RUNTIME) {
+            Ok(v) => (v, false),
+            Err(_) => {
+                eprintln!(
+                    "[nightly] \"{}\" liep langer dan {} minuten — afgebroken, door naar de volgende.",
+                    prompt.title,
+                    MAX_PROMPT_RUNTIME.as_secs() / 60
+                );
+                if let Some(mut k) = killer {
+                    let _ = k.kill();
+                }
+                if let Some(sess) = managed.sessions.lock().unwrap().get_mut(&id) {
+                    sess.status = crate::pty::ManagedStatus::Failed;
+                }
+                (false, true)
+            }
+        };
         // Volledige output naar schijf: de sessie zelf staat alleen in het
         // geheugen en is na een herstart weg, terwijl je 'm 's ochtends juist
         // wil kunnen nalezen.
@@ -500,11 +525,21 @@ fn run_batch_inner(app: &AppHandle, managed: ManagedState, paths: Arc<Mutex<Hash
                 None => (String::new(), None),
             }
         };
-        finish(&client, &base, &key, &prompt.id, ok, &tail);
+        let reason = if ok {
+            None
+        } else if timed_out {
+            Some(format!(
+                "Afgebroken na {} minuten — de sessie liep te lang.",
+                MAX_PROMPT_RUNTIME.as_secs() / 60
+            ))
+        } else {
+            Some("Claude sloot af met een fout — zie het logbestand.".into())
+        };
+        finish(&client, &base, &key, &prompt.id, ok, reason.as_deref().unwrap_or(&tail));
         record_run(journal(
             if ok { RunOutcome::Done } else { RunOutcome::Failed },
             started_at,
-            if ok { None } else { Some("Claude sloot af met een fout — zie het logbestand.".into()) },
+            reason,
             log_path,
         ));
         let _ = app.emit("nightly-session-update", id);

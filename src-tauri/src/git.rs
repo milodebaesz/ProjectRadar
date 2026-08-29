@@ -596,17 +596,33 @@ pub fn claude_shell_line(path: String, prompt: String) -> Result<String, String>
     ))
 }
 
-/// Zelfde opbouw als `claude_shell_line`, maar bewaart Claude's eigen
-/// exit-code als de exit-code van de hele regel (`CLAUDE_EXIT=$?` meteen na
-/// het commando, `exit $CLAUDE_EXIT` als allerlaatste stap — ná de
-/// status-hook, die dus nog steeds altijd draait). Gebruikt door de
-/// nachtelijke prompt-runner om "geslaagd" objectief vast te stellen: geen
-/// garantie dat de taak inhoudelijk klopt, wel dat Claude niet crashte of
-/// werd afgebroken.
+/// Zelfde opbouw als `claude_shell_line`, maar voor **onbeheerde** runs, met
+/// twee verschillen.
+///
+/// 1. Claude's eigen exit-code wordt de exit-code van de hele regel
+///    (`CLAUDE_EXIT=$?` meteen na het commando, `exit $CLAUDE_EXIT` als
+///    allerlaatste stap — ná de status-hook, die dus nog steeds altijd
+///    draait). Zo kan de nachtrunner "geslaagd" objectief vaststellen: geen
+///    garantie dat de taak inhoudelijk klopt, wel dat Claude niet crashte of
+///    werd afgebroken.
+///
+/// 2. `--print --verbose` in plaats van de interactieve TUI. Dat is niet
+///    alleen netter, het is noodzakelijk: de TUI tekent zichzelf steeds
+///    opnieuw op dezelfde plek met absolute cursorposities (`ESC[H`,
+///    `ESC[<rows>;1H`, `ESC[K`) en schrijft dus nooit regels die de
+///    scrollback in schuiven. Een opgenomen TUI-sessie is daarna
+///    onscrollbaar — er ís geen geschiedenis, alleen het laatst getekende
+///    beeld — en het ruwe logbestand staat vol stuurcodes. In print-modus
+///    komt er een gewone transcriptie uit: leesbaar in het logbestand én
+///    scrollbaar in de terminal-dock. `--verbose` houdt de tussenstappen
+///    (tool-aanroepen) erin, anders zie je alleen het slotantwoord.
+///
+/// De interactieve variant hierboven houdt bewust wél de TUI: daar kijk je
+/// live mee, en dan is het volle beeld juist wat je wil.
 pub fn claude_shell_line_capture_exit(path: &str, prompt: &str) -> Result<String, String> {
     let (path_q, file_q, hooks_q, script_q) = prepare_claude_invocation(path, prompt)?;
     Ok(format!(
-        "cd '{path_q}' && PROMPT=\"$(cat '{file_q}')\" && rm -f '{file_q}' && sh '{script_q}' busy && claude --dangerously-skip-permissions --settings '{hooks_q}' \"$PROMPT\"; CLAUDE_EXIT=$?; sh '{script_q}' end; exit $CLAUDE_EXIT"
+        "cd '{path_q}' && PROMPT=\"$(cat '{file_q}')\" && rm -f '{file_q}' && sh '{script_q}' busy && claude --print --verbose --dangerously-skip-permissions --settings '{hooks_q}' \"$PROMPT\"; CLAUDE_EXIT=$?; sh '{script_q}' end; exit $CLAUDE_EXIT"
     ))
 }
 
@@ -775,6 +791,20 @@ mod tests {
     fn shell_single_quote_escapes_quotes() {
         assert_eq!(shell_single_quote("plain"), "plain");
         assert_eq!(shell_single_quote("a'b"), "a'\\''b");
+    }
+
+    #[test]
+    fn unattended_variant_uses_print_mode() {
+        // De TUI stopt niet uit zichzelf als er niemand is om 'm af te sluiten:
+        // de nachtrunner bleef daardoor op de eerste prompt wachten, en de
+        // scheduler liet processen hangen. Print-modus sluit wel af en levert
+        // een gewone transcriptie op i.p.v. een scherm vol cursorstuurcodes.
+        let line = claude_shell_line_capture_exit("/tmp/proj", "doe iets").unwrap();
+        assert!(line.contains("claude --print --verbose"));
+
+        // De interactieve variant houdt juist wél de TUI: daar kijk je live mee.
+        let tui = claude_shell_line("/tmp/proj".into(), "doe iets".into()).unwrap();
+        assert!(!tui.contains("--print"));
     }
 
     #[test]

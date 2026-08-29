@@ -1,7 +1,7 @@
 //! Ingebouwde terminal: PTY-sessies via `portable-pty`. Output streamt naar de
 //! frontend via een Tauri-Channel; invoer/resize/kill via commands.
 
-use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
+use portable_pty::{native_pty_system, Child, ChildKiller, CommandBuilder, MasterPty, PtySize};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::io::{Read, Write};
@@ -256,19 +256,28 @@ pub struct ManagedState {
     next: Arc<AtomicU64>,
 }
 
-/// Start een managed sessie en geeft meteen het sessie-id terug, plus een
-/// receiver die `true`/`false` (Claude's eigen exit-code, zie
-/// `claude_shell_line_capture_exit`) levert zodra het proces stopt. De
-/// aanroeper (de nachtelijke runner) blokkeert op die receiver voor hij de
-/// volgende prompt in de rij van hetzelfde project start — dat is wat
-/// "serieel binnen een project" hier concreet betekent.
+/// Start een managed sessie. Geeft het sessie-id terug, een receiver die
+/// `true`/`false` (Claude's eigen exit-code, zie
+/// `claude_shell_line_capture_exit`) levert zodra het **proces** stopt, en een
+/// killer om de sessie desnoods af te breken.
+///
+/// De aanroeper (de nachtelijke runner) wacht op die receiver voor hij de
+/// volgende prompt start — dat is wat "strikt na elkaar" concreet betekent.
+/// Juist daarom mag dat signaal nooit uitblijven: doet het dat wel, dan staat
+/// de hele nacht stil na de eerste prompt.
+///
+/// Vandaar dat het uit een aparte wacht-thread komt die alleen `child.wait()`
+/// doet, en niet uit de leeslus. Die leeslus eindigt pas bij EOF op de PTY, en
+/// EOF komt er pas als élke fd op de slave dicht is — één achtergebleven
+/// kleinkind (een MCP-server, een ge-`&`-de osascript uit de status-hook) houdt
+/// die open en dan lag de batch stil terwijl Claude allang klaar was.
 pub fn spawn_managed(
     state: &ManagedState,
     cwd: String,
     initial_command: String,
     project_key: String,
     title: String,
-) -> (u64, mpsc::Receiver<bool>) {
+) -> (u64, mpsc::Receiver<bool>, Option<Box<dyn ChildKiller + Send + Sync>>) {
     let id = state.next.fetch_add(1, Ordering::SeqCst);
     state.sessions.lock().unwrap().insert(
         id,
@@ -288,7 +297,7 @@ pub fn spawn_managed(
     let sys = native_pty_system();
     let pair = match sys.openpty(PtySize { rows: MANAGED_ROWS, cols: MANAGED_COLS, pixel_width: 0, pixel_height: 0 }) {
         Ok(p) => p,
-        Err(_) => { fail(&sessions, tx); return (id, rx); }
+        Err(_) => { fail(&sessions, tx); return (id, rx, None); }
     };
     let mut cmd = CommandBuilder::new(user_shell());
     cmd.arg("-l");
@@ -296,21 +305,28 @@ pub fn spawn_managed(
     cmd.env("TERM", "xterm-256color");
     let child = match pair.slave.spawn_command(cmd) {
         Ok(c) => c,
-        Err(_) => { fail(&sessions, tx); return (id, rx); }
+        Err(_) => { fail(&sessions, tx); return (id, rx, None); }
     };
     drop(pair.slave);
+    // Vóór het verplaatsen naar de wacht-thread: hiermee kan de aanroeper een
+    // vastgelopen sessie alsnog afbreken.
+    let killer = child.clone_killer();
 
     let reader = pair.master.try_clone_reader();
     let writer = pair.master.take_writer();
     let (mut reader, mut writer) = match (reader, writer) {
         (Ok(r), Ok(w)) => (r, w),
-        _ => { fail(&sessions, tx); return (id, rx); }
+        _ => { fail(&sessions, tx); return (id, rx, None); }
     };
     let _ = writeln!(writer, "{initial_command}");
     drop(writer);
 
     let master = pair.master;
     let mut child = child;
+
+    // Leeslus: verzamelt output tot de PTY dichtgaat. Mag gerust langer leven
+    // dan het proces zelf — hij bepaalt niet meer wanneer de sessie klaar is.
+    let reader_sessions = sessions.clone();
     std::thread::spawn(move || {
         let _keep_master_alive = master;
         let mut buf = [0u8; 8192];
@@ -318,7 +334,7 @@ pub fn spawn_managed(
             match reader.read(&mut buf) {
                 Ok(0) => break,
                 Ok(n) => {
-                    if let Some(s) = sessions.lock().unwrap().get_mut(&id) {
+                    if let Some(s) = reader_sessions.lock().unwrap().get_mut(&id) {
                         s.output.extend_from_slice(&buf[..n]);
                         // Cap geheugen: bewaar het einde — daar staat meestal de fout.
                         if s.output.len() > MAX_MANAGED_OUTPUT {
@@ -330,6 +346,11 @@ pub fn spawn_managed(
                 Err(_) => break,
             }
         }
+    });
+
+    // Wacht-thread: dit is wat "klaar" betekent. Puur het proces, los van of
+    // de PTY al EOF gaf.
+    std::thread::spawn(move || {
         let ok = child.wait().map(|status| status.success()).unwrap_or(false);
         if let Some(s) = sessions.lock().unwrap().get_mut(&id) {
             s.status = if ok { ManagedStatus::Done } else { ManagedStatus::Failed };
@@ -337,5 +358,68 @@ pub fn spawn_managed(
         let _ = tx.send(ok);
     });
 
-    (id, rx)
+    (id, rx, Some(killer))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    /// Regressie: de nachtrun pakte alleen de eerste van zes prompts op.
+    ///
+    /// Oorzaak: "klaar" werd afgeleid uit EOF op de PTY, en EOF komt er pas
+    /// als élke fd op de slave dicht is. Eén achtergebleven achtergrondproces
+    /// houdt die open, waardoor het signaal nooit kwam en de runner voor
+    /// altijd op prompt 1 bleef wachten. Nu komt het uit `child.wait()`.
+    #[test]
+    fn meldt_klaar_ook_als_een_achtergrondproces_de_pty_openhoudt() {
+        let state = ManagedState::default();
+        // De shell start een slaper die de PTY vasthoudt en sluit zelf af.
+        let (_id, rx, _killer) = spawn_managed(
+            &state,
+            "/tmp".to_string(),
+            "sleep 30 & exit 0".to_string(),
+            "test".to_string(),
+            "test".to_string(),
+        );
+        let uitkomst = rx.recv_timeout(Duration::from_secs(10));
+        assert!(
+            uitkomst.is_ok(),
+            "geen voltooiingssignaal binnen 10s terwijl de shell allang klaar was"
+        );
+    }
+
+    /// De exit-code van de shell bepaalt geslaagd/mislukt — daar hangt in
+    /// `nightly.rs` aan of een prompt op done of failed gezet wordt.
+    #[test]
+    fn geeft_de_exit_code_door() {
+        let state = ManagedState::default();
+        let (_id, ok_rx, _k1) = spawn_managed(
+            &state, "/tmp".to_string(), "exit 0".to_string(), "t".into(), "t".into(),
+        );
+        assert_eq!(ok_rx.recv_timeout(Duration::from_secs(10)).unwrap(), true);
+
+        let (_id2, fail_rx, _k2) = spawn_managed(
+            &state, "/tmp".to_string(), "exit 3".to_string(), "t".into(), "t".into(),
+        );
+        assert_eq!(fail_rx.recv_timeout(Duration::from_secs(10)).unwrap(), false);
+    }
+    /// Bewijs dat de test hierboven de bug zou vangen: het signaal moet komen
+    /// zodra de shell klaar is, niet pas als de achtergrondslaper de PTY
+    /// loslaat. Onder de oude opzet (klaar = EOF) had dit ~30s geduurd.
+    #[test]
+    fn signaal_komt_bij_shell_exit_niet_bij_pty_eof() {
+        let state = ManagedState::default();
+        let start = std::time::Instant::now();
+        let (_id, rx, _k) = spawn_managed(
+            &state, "/tmp".to_string(), "sleep 30 & exit 0".to_string(), "t".into(), "t".into(),
+        );
+        rx.recv_timeout(Duration::from_secs(10)).expect("geen signaal");
+        let verstreken = start.elapsed();
+        assert!(
+            verstreken < Duration::from_secs(3),
+            "signaal kwam pas na {verstreken:?} — dat wijst op wachten op PTY-EOF"
+        );
+    }
 }

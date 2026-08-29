@@ -246,6 +246,11 @@
           "id": "ochtendoverzicht",
           "text": "Ochtendoverzicht: nachtjournaal op schijf met uitkomst per prompt, gegroepeerd per nacht",
           "done": true
+        },
+        {
+          "id": "print-modus",
+          "text": "Onbeheerde runs in print-modus: nachtrunner pakt de hele rij op en de opname is scrollbaar",
+          "done": true
         }
       ]
     },
