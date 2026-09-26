@@ -159,6 +159,12 @@ export default function App() {
       return;
     }
     const command = runCommandOf(p);
+    if (!command) {
+      // De Start-knop verschijnt hier niet voor, maar de remote-bediening en
+      // sneltoetsen komen langs dezelfde weg binnen.
+      showToast(`Geen start-commando bekend voor ${p.name} — stel er een in bij het project.`);
+      return;
+    }
     term.openTerminal({ title: `dev · ${p.name}`, cwd: path, initialCommand: command });
     showToast(`Start: ${command}`);
 

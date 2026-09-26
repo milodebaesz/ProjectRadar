@@ -257,8 +257,38 @@ export function effectiveStack(p: Project): string[] {
   return p.detectedStack;
 }
 
-export function statusOf(p: Project): Status {
-  return p.meta.status ?? "idee";
+/** Na hoeveel dagen stilte een project zonder handmatige status "stil" heet. */
+export const ACTIVE_DAYS = 14;
+
+/**
+ * Status afgeleid uit git-activiteit, voor projecten zonder handmatige keuze.
+ *
+ * Zonder dit kreeg élke gescande repo "Idee" — ook eentje met honderden
+ * commits en activiteit van gisteren — waardoor de statusfilters niets
+ * zeiden zolang je niet overal een `.projectradar.json` had staan.
+ *
+ * "Afgerond" wordt nooit afgeleid: of iets klaar is, is een oordeel dat je
+ * zelf velt en niet uit stilte volgt. Een repo zonder commits (of met alleen
+ * een initial commit) is een idee; daarna beslist de laatste commit.
+ */
+export function derivedStatus(p: Project, now: number = Date.now()): Status {
+  const last = newestState(p)?.lastCommitDate;
+  const then = last ? new Date(last).getTime() : NaN;
+  if (Number.isNaN(then)) return "idee";
+  // Eén commit is meestal de scaffold; dat maakt nog geen lopend project.
+  if (Math.max(0, ...p.states.map((s) => s.totalCommits)) <= 1) return "idee";
+  const days = Math.floor((now - then) / 86_400_000);
+  return days <= ACTIVE_DAYS ? "actief" : "onhold";
+}
+
+/** Handmatige status heeft voorrang; anders het oordeel uit de git-historie. */
+export function statusOf(p: Project, now: number = Date.now()): Status {
+  return p.meta.status ?? derivedStatus(p, now);
+}
+
+/** Staat de status handmatig vast, of komt hij uit `derivedStatus`? */
+export function hasManualStatus(p: Project): boolean {
+  return !!p.meta.status;
 }
 
 /** Na hoeveel dagen stilte een project dat "actief" heet is afgedwaald. */
@@ -353,9 +383,21 @@ export function localPath(p: Project): string | null {
   return localState(p)?.path ?? null;
 }
 
-/** Effectief start-commando: handmatig veld > auto-detectie > npm run dev. */
-export function runCommandOf(p: Project): string {
-  return p.meta.runCommand?.trim() || p.defaultRunCommand || "npm run dev";
+/**
+ * Effectief start-commando: handmatig veld > auto-detectie. `null` als geen
+ * van beide iets oplevert.
+ *
+ * Bewust geen terugval op "npm run dev": dat gaf een Swift-repo of een map
+ * zonder package.json een Start-knop die gegarandeerd op een foutmelding
+ * uitliep. Liever geen knop dan een knop die liegt.
+ */
+export function runCommandOf(p: Project): string | null {
+  return p.meta.runCommand?.trim() || p.defaultRunCommand || null;
+}
+
+/** Kan de dev-server hier starten: project staat op deze PC én er is een commando. */
+export function canRun(p: Project): boolean {
+  return !!localPath(p) && !!runCommandOf(p);
 }
 
 /**

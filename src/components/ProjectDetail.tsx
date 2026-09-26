@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { ClaudeState, Project, ProjectMeta, Status, Phase } from "../types";
 import ClaudeBadge from "./ClaudeBadge";
 import { STATUS_LABEL } from "../types";
-import { compareStates, effectiveStack, roadmapProgress, localPath, runCommandOf, devUrlOf, buildRoadmapInstruction, nextOpenPhase, buildPickUpPrompt, buildCodeCheckInstruction, buildDesignCheckInstruction, buildScheduleEntry, scheduleIdOf, dedupeRoadmap, normalizeRoadmap, refreshRoadmapFromFile } from "../lib/model";
+import { compareStates, effectiveStack, roadmapProgress, localPath, runCommandOf, derivedStatus, devUrlOf, buildRoadmapInstruction, nextOpenPhase, buildPickUpPrompt, buildCodeCheckInstruction, buildDesignCheckInstruction, buildScheduleEntry, scheduleIdOf, dedupeRoadmap, normalizeRoadmap, refreshRoadmapFromFile } from "../lib/model";
 import { readRadarFile } from "../lib/tauri";
 import { relativeTime, uid } from "../lib/format";
 import { isGithubRemote } from "../lib/github";
@@ -192,6 +192,10 @@ export default function ProjectDetail({ project, claudeState, hasGithubToken, on
   const progress = roadmapProgress(project);
   const canLaunch = !!localPath(project);
   const runCommand = runCommandOf({ ...project, meta });
+  // canLaunch dekt de Claude-acties (project staat hier); de dev-server heeft
+  // daarnaast een commando nodig, anders start je een terminal op niets.
+  const canRun = canLaunch && !!runCommand;
+  const derived = derivedStatus(project);
   const devUrl = devUrlOf({ ...project, meta });
 
   const lastRun = meta.history?.[0];
@@ -210,17 +214,21 @@ export default function ProjectDetail({ project, claudeState, hasGithubToken, on
         </div>
         <div className="head-right">
           <ClaudeBadge state={claudeState} />
-          {canLaunch && (
+          {canRun && (
             <button className="launch" title={`Start: ${runCommand}`} onClick={() => onLaunch(project)}>
               ▶ Start
             </button>
           )}
           <select
             className="badge"
-            value={meta.status ?? "idee"}
-            onChange={(e) => update({ status: e.target.value as Status })}
+            value={meta.status ?? ""}
+            onChange={(e) =>
+              update({ status: e.target.value ? (e.target.value as Status) : undefined })
+            }
             style={{ padding: "7px 12px", borderRadius: 9, border: "1px solid var(--line)", background: "var(--bg-2)", color: "var(--txt)" }}
           >
+            {/* Leeg = geen handmatige keuze; de git-historie beslist. */}
+            <option value="">Automatisch · {STATUS_LABEL[derived]}</option>
             {STATUSES.map((s) => (
               <option key={s} value={s}>
                 {STATUS_LABEL[s]}
@@ -300,15 +308,17 @@ export default function ProjectDetail({ project, claudeState, hasGithubToken, on
           <div className="field" style={{ marginBottom: 0, marginTop: 14 }}>
             <label>Start-commando (dev-server)</label>
             <input
-              placeholder={project.defaultRunCommand || "npm run dev"}
+              placeholder={project.defaultRunCommand || "bijv. npm run dev"}
               value={meta.runCommand ?? ""}
               onChange={(e) => update({ runCommand: e.target.value || undefined })}
               style={{ fontFamily: "var(--mono)" }}
             />
             <p className="hint" style={{ marginTop: 6, marginBottom: 0 }}>
-              {canLaunch
-                ? `Wordt in een terminal gedraaid in de projectmap. Nu: ${runCommand}`
-                : "Dit project staat niet op deze PC, dus launchen kan hier niet."}
+              {!canLaunch
+                ? "Dit project staat niet op deze PC, dus launchen kan hier niet."
+                : runCommand
+                  ? `Wordt in een terminal gedraaid in de projectmap. Nu: ${runCommand}`
+                  : "Niets gedetecteerd — vul hier een commando in om de Start-knop te krijgen."}
             </p>
           </div>
           <div className="field" style={{ marginBottom: 0, marginTop: 14 }}>

@@ -9,6 +9,8 @@ import {
   localPath,
   nextOpenPhase,
   driftDays,
+  runCommandOf,
+  hasManualStatus,
 } from "../lib/model";
 import { relativeTime } from "../lib/format";
 
@@ -39,7 +41,9 @@ export default function ProjectCard({
   const stack = effectiveStack(project);
   const cmp = compareStates(project);
   const progress = roadmapProgress(project);
-  const canLaunch = !!localPath(project);
+  const startCommand = runCommandOf(project);
+  const canRun = !!localPath(project) && !!startCommand;
+  const autoStatus = !hasManualStatus(project);
   const next = nextOpenPhase(project.meta.roadmap ?? []);
   const drift = driftDays(project);
   const nextMilestone = next?.milestones[0] ?? null;
@@ -61,12 +65,21 @@ export default function ProjectCard({
         </h3>
         <div className="head-right">
           <ClaudeBadge state={claudeState} />
-          {canLaunch && (
-            <button className="launch" title="Start de dev-server" onClick={() => onLaunch(project)}>
+          {canRun && (
+            <button className="launch" title={`Start de dev-server: ${startCommand}`} onClick={() => onLaunch(project)}>
               ▶ Start
             </button>
           )}
-          <span className={`badge ${BADGE_CLASS[status]}`}>{STATUS_LABEL[status]}</span>
+          <span
+            className={`badge ${BADGE_CLASS[status]}${autoStatus ? " auto" : ""}`}
+            title={
+              autoStatus
+                ? "Afgeleid uit de git-activiteit — kies zelf een status in het project om dit vast te zetten"
+                : undefined
+            }
+          >
+            {STATUS_LABEL[status]}
+          </span>
         </div>
       </div>
       <div className="desc">

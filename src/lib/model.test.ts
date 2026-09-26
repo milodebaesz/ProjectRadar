@@ -16,6 +16,11 @@ import {
   normalizeRoadmap,
   driftDays,
   DRIFT_DAYS,
+  canRun,
+  derivedStatus,
+  statusOf,
+  hasManualStatus,
+  ACTIVE_DAYS,
 } from "./model";
 
 /** Minimale RepoInfo-fixture; overschrijf alleen wat de test nodig heeft. */
@@ -133,11 +138,20 @@ describe("runCommandOf / devUrlOf", () => {
     expect(runCommandOf(p)).toBe("pnpm dev");
   });
 
-  it("valt terug op de auto-detectie en daarna op npm run dev", () => {
+  it("valt terug op de auto-detectie, en daarna op niets", () => {
     const auto = buildProjects([repo({ default_run_command: "npm start" })], {}, "mac")[0];
     expect(runCommandOf(auto)).toBe("npm start");
+    // Bewust geen "npm run dev" meer: die gok gaf een Swift-repo of een map
+    // zonder package.json een Start-knop die altijd op een fout uitliep.
     const none = buildProjects([repo()], {}, "mac")[0];
-    expect(runCommandOf(none)).toBe("npm run dev");
+    expect(runCommandOf(none)).toBeNull();
+  });
+
+  it("canRun vraagt om én een lokaal pad én een commando", () => {
+    const met = buildProjects([repo({ default_run_command: "npm start" })], {}, "mac")[0];
+    expect(canRun(met)).toBe(true);
+    const zonder = buildProjects([repo()], {}, "mac")[0];
+    expect(canRun(zonder)).toBe(false);
   });
 
   it("devUrlOf geeft null als er niets bekend is", () => {
@@ -323,6 +337,55 @@ describe("refreshRoadmapFromFile", () => {
     const file = [phase({ id: "nieuw-f", milestones: [{ id: "nieuw-m", text: "Login-flow bouwen", done: false }] })];
     const result = refreshRoadmapFromFile(cached, file);
     expect(result[0].milestones[0]).toMatchObject({ text: "Login-flow bouwen", done: true });
+  });
+});
+
+describe("derivedStatus / statusOf", () => {
+  const NU = new Date("2026-08-24T12:00:00Z").getTime();
+  const DAG = 86_400_000;
+
+  /** Project zonder handmatige status, met instelbare historie. */
+  function proj(dagenGeleden: number | null, totalCommits = 40): Project {
+    const p = buildProjects([repo({ total_commits: totalCommits })], {}, "mac")[0];
+    p.states[0].lastCommitDate =
+      dagenGeleden === null ? null : new Date(NU - dagenGeleden * DAG).toISOString();
+    p.states[0].totalCommits = totalCommits;
+    return p;
+  }
+
+  it("noemt een repo met recente commits actief", () => {
+    expect(derivedStatus(proj(2), NU)).toBe("actief");
+  });
+
+  it("legt de grens op ACTIVE_DAYS", () => {
+    expect(derivedStatus(proj(ACTIVE_DAYS), NU)).toBe("actief");
+    expect(derivedStatus(proj(ACTIVE_DAYS + 1), NU)).toBe("onhold");
+  });
+
+  it("noemt een repo zonder commits een idee", () => {
+    expect(derivedStatus(proj(null), NU)).toBe("idee");
+  });
+
+  it("telt één commit nog als idee — dat is de scaffold", () => {
+    expect(derivedStatus(proj(1, 1), NU)).toBe("idee");
+    expect(derivedStatus(proj(1, 2), NU)).toBe("actief");
+  });
+
+  it("leidt nooit 'afgerond' af, hoe lang het ook stil is", () => {
+    expect(derivedStatus(proj(900), NU)).toBe("onhold");
+  });
+
+  it("laat een handmatige status altijd voorgaan", () => {
+    const handmatig = buildProjects([repo()], { demo: { key: "demo", status: "afgerond" } }, "mac")[0];
+    handmatig.states[0].lastCommitDate = new Date(NU - DAG).toISOString();
+    expect(statusOf(handmatig, NU)).toBe("afgerond");
+    expect(hasManualStatus(handmatig)).toBe(true);
+  });
+
+  it("valt zonder handmatige status terug op de afleiding", () => {
+    const p = proj(2);
+    expect(hasManualStatus(p)).toBe(false);
+    expect(statusOf(p, NU)).toBe("actief");
   });
 });
 
