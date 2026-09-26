@@ -44,6 +44,10 @@ export default function ProjectCard({
   const startCommand = runCommandOf(project);
   const canRun = !!localPath(project) && !!startCommand;
   const autoStatus = !hasManualStatus(project);
+  // Met één machine vergelijkt de PC-regel niets: de naam is altijd deze PC en
+  // de schoon/vuil-stip staat al in de git-regel eronder. Alleen ahead/behind
+  // is dan nieuw, en dat verhuist naar die git-regel.
+  const multiPc = project.states.length > 1;
   const next = nextOpenPhase(project.meta.roadmap ?? []);
   const drift = driftDays(project);
   const nextMilestone = next?.milestones[0] ?? null;
@@ -82,9 +86,10 @@ export default function ProjectCard({
           </span>
         </div>
       </div>
-      <div className="desc">
-        {project.meta.description || <span style={{ color: "var(--txt-faint)" }}>Nog geen beschrijving.</span>}
-      </div>
+      {/* Geen placeholder bij een lege beschrijving: op een dashboard vol
+          ongevulde projecten was "Nog geen beschrijving." de meest gelezen
+          regel van het scherm, en hij zei niets. */}
+      {project.meta.description && <div className="desc">{project.meta.description}</div>}
 
       {stack.length > 0 && (
         <div className="stack">
@@ -122,7 +127,7 @@ export default function ProjectCard({
         </label>
       )}
 
-      {project.states.length > 0 && (
+      {multiPc && (
         <div className="pcs">
           <span className="lbl">Op:</span>
           {project.states.map((s) => {
@@ -156,6 +161,16 @@ export default function ProjectCard({
           {primary.totalCommits > 0 ? (
             <>
               <span className="git">{primary.branch ?? "—"}</span>
+              {!multiPc && primary.ahead > 0 && (
+                <span className="ah" title={`${primary.ahead} commits voor op de remote`}>
+                  ▲{primary.ahead}
+                </span>
+              )}
+              {!multiPc && primary.behind > 0 && (
+                <span className="bh" title={`${primary.behind} commits achter op de remote`}>
+                  ▼{primary.behind}
+                </span>
+              )}
               <span>· {relativeTime(primary.lastCommitDate)}</span>
               {primary.hasUncommitted ? (
                 <span className="changes">● niet-gecommit</span>

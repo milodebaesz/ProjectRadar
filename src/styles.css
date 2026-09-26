@@ -312,6 +312,9 @@ button { font-family: inherit; }
 /* Ring om de hele kaart i.p.v. alleen om de titel. Valt de :has()-regel weg,
    dan blijft de gewone :focus-visible-ring op de titel over. */
 .card:has(.card-open:focus-visible) { border-color:var(--focus); box-shadow:0 0 0 2px var(--focus); }
+/* min-height houdt een korte en een lange beschrijving op dezelfde hoogte;
+   een kaart zónder beschrijving rendert de .desc niet en houdt dus ook geen
+   lege regel vast. */
 .card .desc { color:var(--txt-dim); font-size:12.8px; margin-top:6px; line-height:1.5; min-height:36px; }
 .badge { font-size:11px; font-weight:650; padding:4px 9px; border-radius:7px; white-space:nowrap; display:inline-flex; align-items:center; gap:5px; }
 .badge::before { content:""; width:6px; height:6px; border-radius:50%; background:currentColor; }
@@ -357,6 +360,10 @@ button { font-family: inherit; }
 .meta .changes { color:var(--warn); }
 .meta .clean { color:var(--ahead); }
 .meta .weekly { color:var(--txt-faint); margin-left:auto; }
+/* Voor/achter op de remote — bij één PC staat dit hier in plaats van in de
+   PC-regel, met dezelfde kleuren als daar. */
+.meta .ah { color:var(--ahead); font-family:var(--mono); margin-left:-8px; }
+.meta .bh { color:var(--behind); font-family:var(--mono); margin-left:-8px; }
 
 .pcs { display:flex; align-items:center; gap:6px; margin-top:12px; flex-wrap:wrap; }
 .pcs .lbl { font-size:11px; color:var(--txt-faint); margin-right:2px; }
