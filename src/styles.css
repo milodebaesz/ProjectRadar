@@ -472,8 +472,12 @@ button { font-family: inherit; }
 .roadmap-phase .ph-head { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
 .roadmap-phase .ph-head input.ph-name { font-weight:640; font-size:14px; border:none; background:none; flex:1; min-width:0; color:var(--txt); }
 .roadmap-phase .ph-head .ph-target { width:88px; min-width:0; flex-shrink:1; font-size:12px; background:var(--bg-2); border:1px solid var(--line); border-radius:8px; padding:5px 7px; color:var(--txt-dim); }
-/* ── Sprint-planning (react-datepicker) ── */
-.roadmap-phase .ph-head .react-datepicker-wrapper { width:150px; flex-shrink:1; min-width:0; }
+/* ── Sprint-planning (react-datepicker) ──
+   react-datepicker zet met `isClearable` een __input-container in de rij en
+   géén -wrapper; zonder die tweede selector groeit de kiezer tot honderden
+   pixels en knijpt hij de fasenaam (flex:1, min-width:0) naar nul. */
+.roadmap-phase .ph-head .react-datepicker-wrapper,
+.roadmap-phase .ph-head .react-datepicker__input-container { width:150px; flex:0 0 150px; min-width:0; }
 .ph-schedule-input { width:100%; font-size:12px; font-family:inherit; background:var(--bg-2); border:1px solid var(--line); border-radius:8px; padding:5px 7px; color:var(--txt-dim); cursor:pointer; }
 .ph-schedule-input:hover { border-color:var(--accent); color:var(--txt); }
 .ph-schedule-input.set { border-color:var(--accent); color:var(--accent); background:var(--bg-3); font-weight:600; }
