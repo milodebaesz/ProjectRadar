@@ -11,6 +11,12 @@ export interface RepoInfo {
   total_commits: number;
   /** Aantal commits in de afgelopen 7 dagen. */
   weekly_commits: number;
+  /**
+   * Commits per rollende week, index 0 = de afgelopen 7 dagen, oplopend terug
+   * in de tijd. Lengte is altijd `COMMIT_WEEKS` (12) uit de Rust-kant.
+   * Alleen bekend voor de scan van déze PC — de cloud bewaart 'm niet.
+   */
+  commit_weeks: number[];
   has_uncommitted: boolean;
   remote_url: string | null;
   has_upstream: boolean;

@@ -2,7 +2,7 @@ import type { MachineInfo } from "../types";
 import { relativeTime } from "../lib/format";
 import type { TermSpec } from "./TerminalDock";
 
-export type View = "overzicht" | "nacht" | "instellingen";
+export type View = "overzicht" | "statistieken" | "nacht" | "instellingen";
 
 interface Props {
   view: View;
@@ -53,6 +53,12 @@ export default function Sidebar({
           onClick={() => onNav("overzicht")}
         >
           <span className="ic">▦</span> Overzicht
+        </button>
+        <button
+          className={view === "statistieken" ? "on" : ""}
+          onClick={() => onNav("statistieken")}
+        >
+          <span className="ic">▤</span> Statistieken
         </button>
         <button className={view === "nacht" ? "on" : ""} onClick={() => onNav("nacht")}>
           <span className="ic">☾</span> Nachtelijke runs

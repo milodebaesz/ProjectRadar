@@ -52,6 +52,10 @@ pub struct RepoInfo {
     pub default_dev_url: Option<String>,
     /// Aantal commits in de afgelopen 7 dagen.
     pub weekly_commits: u32,
+    /// Commits per rollende week, index 0 = de afgelopen 7 dagen, oplopend
+    /// terug in de tijd. Lengte is altijd `COMMIT_WEEKS`; voedt de
+    /// statistieken-view (commits/week per project).
+    pub commit_weeks: Vec<u32>,
     /// Inhoud van een `.projectradar.json` in de repo-root, indien aanwezig.
     /// Vorm sluit aan op `ProjectMeta` in de frontend.
     pub radar_meta: Option<serde_json::Value>,
@@ -306,6 +310,27 @@ fn is_ignored(name: &str) -> bool {
     name.starts_with('.') || IGNORED_DIRS.contains(&name)
 }
 
+/// Hoeveel rollende weken commit-historie we per repo meenemen.
+pub const COMMIT_WEEKS: usize = 12;
+
+const WEEK_SECS: i64 = 7 * 24 * 60 * 60;
+
+/// Verdeel commit-tijdstempels (unix-seconden) over rollende weken van 7 dagen:
+/// index 0 = de afgelopen 7 dagen, index 1 de 7 dagen daarvoor, enzovoort.
+/// Commits buiten het venster vallen weg; een commit met een tijdstempel in de
+/// toekomst (scheve klok op een andere machine) telt mee als "deze week" —
+/// wegdoen zou een echte commit onzichtbaar maken.
+fn bucket_weeks(timestamps: &[i64], now: i64, weeks: usize) -> Vec<u32> {
+    let mut out = vec![0u32; weeks];
+    for &ts in timestamps {
+        let idx = ((now - ts).max(0) / WEEK_SECS) as usize;
+        if idx < weeks {
+            out[idx] += 1;
+        }
+    }
+    out
+}
+
 /// Lees de git-stand van één repo uit.
 fn read_repo(path: &Path) -> RepoInfo {
     let branch_raw = git(path, &["rev-parse", "--abbrev-ref", "HEAD"]);
@@ -332,9 +357,15 @@ fn read_repo(path: &Path) -> RepoInfo {
         .and_then(|s| s.parse::<u32>().ok())
         .unwrap_or(0);
 
-    let weekly_commits = git(path, &["rev-list", "--count", "--since=7 days ago", "HEAD"])
-        .and_then(|s| s.parse::<u32>().ok())
-        .unwrap_or(0);
+    // Eén `git log` levert zowel de weekhistorie als het aantal van deze week.
+    // Bewust geen tweede `rev-list --count --since=7 days` ernaast: dat is een
+    // extra subprocess per repo, en de eerste emmer is precies dat getal.
+    let since = format!("--since={} weeks ago", COMMIT_WEEKS);
+    let stamps: Vec<i64> = git(path, &["log", &since, "--format=%ct"])
+        .map(|out| out.lines().filter_map(|l| l.trim().parse::<i64>().ok()).collect())
+        .unwrap_or_default();
+    let commit_weeks = bucket_weeks(&stamps, chrono::Utc::now().timestamp(), COMMIT_WEEKS);
+    let weekly_commits = commit_weeks[0];
 
     let has_uncommitted = git(path, &["status", "--porcelain"])
         .map(|s| !s.is_empty())
@@ -373,6 +404,7 @@ fn read_repo(path: &Path) -> RepoInfo {
         last_commit_date,
         total_commits,
         weekly_commits,
+        commit_weeks,
         has_uncommitted,
         remote_url,
         has_upstream,
@@ -822,6 +854,44 @@ mod tests {
     fn project_key_matches_format_ts_normalization() {
         assert_eq!(project_key("  Mike's Site "), "mike's site");
         assert_eq!(project_key("ProjectRadar"), "projectradar");
+    }
+
+    #[test]
+    fn bucket_weeks_splits_on_rolling_seven_days() {
+        let now = 1_000 * WEEK_SECS; // ruim voorbij het venster, rekent prettig
+        let day = 24 * 60 * 60;
+        let stamps = [
+            now - day,             // vandaag-ish  -> emmer 0
+            now - 6 * day,         // net binnen 7 dagen -> emmer 0
+            now - 8 * day,         // week daarvoor -> emmer 1
+            now - 20 * day,        // -> emmer 2
+        ];
+        let out = bucket_weeks(&stamps, now, 4);
+        assert_eq!(out, vec![2, 1, 1, 0]);
+    }
+
+    #[test]
+    fn bucket_weeks_drops_commits_outside_the_window() {
+        let now = 1_000 * WEEK_SECS;
+        // Precies op de grens hoort in de laatste emmer, een seconde ouder valt weg.
+        let laatste = now - (3 * WEEK_SECS);
+        assert_eq!(bucket_weeks(&[laatste], now, 4), vec![0, 0, 0, 1]);
+        assert_eq!(bucket_weeks(&[laatste - WEEK_SECS], now, 4), vec![0, 0, 0, 0]);
+    }
+
+    #[test]
+    fn bucket_weeks_counts_future_stamps_as_this_week() {
+        // Scheve klok op een andere machine: de commit bestaat echt, dus
+        // liever als "deze week" tellen dan onzichtbaar maken.
+        let now = 1_000 * WEEK_SECS;
+        assert_eq!(bucket_weeks(&[now + 5 * 24 * 60 * 60], now, 3), vec![1, 0, 0]);
+    }
+
+    #[test]
+    fn bucket_weeks_always_has_full_length() {
+        // De frontend indexeert blind op emmer 0; een lege repo mag geen
+        // kortere vector opleveren.
+        assert_eq!(bucket_weeks(&[], 0, 12).len(), 12);
     }
 
     #[test]

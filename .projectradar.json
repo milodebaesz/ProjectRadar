@@ -240,7 +240,7 @@
         {
           "id": "statistieken",
           "text": "Statistieken-view: commits/week per project, totaal actieve projecten",
-          "done": false
+          "done": true
         },
         {
           "id": "ochtendoverzicht",

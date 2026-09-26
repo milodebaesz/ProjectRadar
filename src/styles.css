@@ -58,6 +58,10 @@
   --warnbg:     rgba(180,83,9,.08);
   --warnbd:     rgba(180,83,9,.22);
   --scrim:      rgba(9,16,30,.55);
+  /* Sparkline: de balk zelf gedempt teal, het spoor eronder bijna wit —
+     een week zonder commits mag geen blok lijken. */
+  --spark:      rgba(13,148,136,.42);
+  --spark-track:rgba(20,49,94,.06);
 
   /* Primaire knop: navy in licht, teal in donker (navy-op-navy verdwijnt). */
   --btn-bg:     linear-gradient(135deg, #14315e, #1d4d8f);
@@ -114,6 +118,8 @@
   --accent-sf2: rgba(45,212,191,.24);
   --accent-bd:  rgba(45,212,191,.38);
   --accent-glow:rgba(45,212,191,.35);
+  --spark:      rgba(45,212,191,.40);
+  --spark-track:rgba(232,238,249,.06);
   --idee-sf:    rgba(167,139,250,.14);
   --actief-sf:  rgba(45,212,191,.14);
   --onhold-sf:  rgba(251,191,36,.14);
@@ -554,3 +560,38 @@ button { font-family: inherit; }
 .o-skipped { color:var(--afgerond); background:var(--afgerond-sf); }
 
 .toast { position:fixed; bottom:22px; right:22px; background:var(--bg-2); border:1px solid var(--line); box-shadow:var(--shadow); padding:11px 16px; border-radius:10px; font-size:13px; color:var(--txt); z-index:50; }
+
+/* ── Statistieken ──
+   Balkjes gebruiken de accentkleur als signaal (activiteit), met de afgelopen
+   week vol en de rest gedempt: zo leest de trend zonder legenda. Alle tinten
+   uit tokens, dus donkere modus volgt vanzelf. */
+/* Vaste 2 of 4 kolommen in plaats van auto-fit: auto-fit gaf bij tussen-
+   breedtes een 3+1, met één losse tegel op een tweede rij. */
+.st-kpis { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:14px; margin-bottom:18px; max-width:1100px; }
+@media (min-width: 1100px) { .st-kpis { grid-template-columns:repeat(4, minmax(0, 1fr)); } }
+.st-kpi { background:var(--bg-2); border:1px solid var(--line); border-radius:var(--radius); padding:16px 18px; box-shadow:var(--shadow); display:flex; flex-direction:column; gap:2px; }
+.st-kpi b { font-size:26px; font-weight:650; color:var(--txt); line-height:1.15; font-variant-numeric:tabular-nums; }
+.st-kpi span { font-size:12.5px; color:var(--txt-dim); }
+.st-kpi em { font-size:11.5px; color:var(--txt-faint); font-style:normal; margin-top:3px; }
+
+.st-bars { display:flex; align-items:flex-end; gap:3px; height:30px; border-bottom:1px solid var(--line); }
+.st-bars.tall { height:110px; gap:6px; }
+/* Het spoor markeert alleen dát er een week is; de balk draagt de waarde.
+   Vandaar een vrijwel onzichtbare track en een duidelijk gevulde balk. */
+.st-bar { flex:1; min-width:5px; height:100%; display:flex; align-items:flex-end; background:var(--spark-track); border-radius:3px 3px 0 0; }
+.st-bar-fill { width:100%; background:var(--spark); border-radius:3px 3px 0 0; min-height:2px; }
+/* De afgelopen week is waar je naar kijkt: die krijgt de volle accentkleur. */
+.st-bar.now .st-bar-fill { background:var(--accent); }
+/* Een lege week houdt alleen het spoor — geen streepje dat als commit leest. */
+.st-bar.nil .st-bar-fill { background:transparent; min-height:0; }
+
+.st-axis { display:flex; justify-content:space-between; margin-top:8px; font-size:11.5px; color:var(--txt-faint); }
+
+.st-rows { display:flex; flex-direction:column; }
+.st-row { display:grid; grid-template-columns:minmax(160px, 1.7fr) minmax(110px, 1.3fr) 66px 66px; align-items:center; gap:14px; padding:11px 0; border-bottom:1px solid var(--line); }
+.st-row:last-child { border-bottom:none; }
+.st-row-name { display:flex; align-items:center; gap:8px; min-width:0; }
+.st-name { font-size:13.5px; font-weight:600; color:var(--txt); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.st-row-num { text-align:right; display:flex; flex-direction:column; gap:1px; }
+.st-row-num b { font-size:15px; font-weight:640; color:var(--txt); font-variant-numeric:tabular-nums; }
+.st-row-num span { font-size:11px; color:var(--txt-faint); }

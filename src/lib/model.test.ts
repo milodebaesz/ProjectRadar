@@ -30,6 +30,7 @@ function repo(p: Partial<RepoInfo> = {}): RepoInfo {
     last_commit_date: "2026-06-01T10:00:00Z",
     total_commits: 3,
     weekly_commits: 1,
+    commit_weeks: [1, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     has_uncommitted: false,
     remote_url: null,
     has_upstream: false,

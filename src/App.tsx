@@ -5,6 +5,7 @@ import Sidebar, { type View } from "./components/Sidebar";
 import Dashboard from "./components/Dashboard";
 import SettingsView from "./components/Settings";
 import NightlyOverview from "./components/NightlyOverview";
+import Statistics from "./components/Statistics";
 import ProjectDetail from "./components/ProjectDetail";
 import { localPath, runCommandOf, devUrlOf, portFromUrl, buildClaudePrompt, toggleMilestone } from "./lib/model";
 import {
@@ -259,6 +260,13 @@ export default function App() {
     [scan, ignored],
   );
 
+  // Zelfde filter als in de scan-hook: verwijderde projecten zijn op pad
+  // genegeerd en horen ook niet in de statistieken mee te tellen.
+  const visibleRepos = useMemo(
+    () => (scan?.repos ?? []).filter((r) => !ignored.includes(r.path)),
+    [scan, ignored],
+  );
+
   const pcCount = useMemo(() => {
     const set = new Set<string>();
     projects.forEach((p) => p.states.forEach((s) => set.add(s.machine)));
@@ -311,6 +319,8 @@ export default function App() {
           onClaude={handleClaude}
           onDelete={handleDelete}
         />
+      ) : view === "statistieken" ? (
+        <Statistics repos={visibleRepos} projects={projects} scanned={!!scan} />
       ) : view === "nacht" ? (
         <NightlyOverview runs={nightly.runs} isTauri={tauri} onMarkSeen={nightly.markSeen} />
       ) : view === "instellingen" ? (
