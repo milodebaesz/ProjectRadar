@@ -295,7 +295,10 @@ button { font-family: inherit; }
 .drag-wrap.dragging { opacity:.45; }
 .drag-wrap.over > .card { border-color:var(--accent); box-shadow:0 0 0 2px var(--accent); }
 .drag-hint { margin:-4px 0 12px; }
-.card { background: var(--bg-2); border:1px solid var(--line); border-radius:var(--radius); padding:17px 17px 15px; cursor:pointer; transition:transform .12s, border-color .12s, box-shadow .12s; position:relative; overflow:hidden; box-shadow:var(--shadow); }
+/* Kolom + margin-top:auto op .meta: de kaarten in een rij zijn al even hoog,
+   maar zonder dit zweeft de git-regel op de hoogte van de inhoud erboven en
+   staan de voetregels van een rij niet op één lijn. */
+.card { background: var(--bg-2); border:1px solid var(--line); border-radius:var(--radius); padding:17px 17px 15px; cursor:pointer; transition:transform .12s, border-color .12s, box-shadow .12s; position:relative; overflow:hidden; box-shadow:var(--shadow); display:flex; flex-direction:column; }
 .card:hover { transform:translateY(-3px); border-color:var(--accent); box-shadow:var(--shadow-lift); }
 .card .head { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
 .card h3 { font-size:15.5px; font-weight:640; }
@@ -346,7 +349,7 @@ button { font-family: inherit; }
 .next-milestone input { margin-top:2px; flex-shrink:0; }
 .next-milestone span { line-height:1.4; }
 
-.meta { display:flex; align-items:center; gap:14px; margin-top:14px; padding-top:13px; border-top:1px solid var(--line); font-size:12px; color:var(--txt-faint); flex-wrap:wrap; }
+.meta { display:flex; align-items:center; gap:14px; margin-top:auto; padding-top:13px; border-top:1px solid var(--line); font-size:12px; color:var(--txt-faint); flex-wrap:wrap; }
 .meta .git { font-family:var(--mono); color:var(--txt-dim); }
 .meta .changes { color:var(--warn); }
 .meta .clean { color:var(--ahead); }
